@@ -64,6 +64,10 @@ mise run opencode:ask
 
 This example reuses the sibling `example/neuronlake_mvp/lake.yaml` and model files so the same downloaded experts power both the curl MVP and OpenCode.
 
+The `mise` OpenCode tasks use isolated OpenCode state under `.opencode-state/`. This keeps the example reproducible and avoids failures from an existing global OpenCode SQLite state. The directory is ignored by Git.
+
+OpenCode can omit `max_tokens`; this example sets `NEURONLAKE_DEFAULT_MAX_TOKENS=192` so llama.cpp does not fall back to its infinite generation default.
+
 If `llama-completion` fails while initializing Metal, force CPU execution for the server:
 
 ```bash

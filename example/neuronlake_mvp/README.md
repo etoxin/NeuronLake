@@ -95,6 +95,8 @@ This is intentionally small but real:
 
 Generation starts a fresh `llama-completion` process per request. That is slow but useful for the MVP because it keeps the server simple and exercises the local expert path without a resident model manager.
 
+If a client omits `max_tokens`, the server uses `NEURONLAKE_DEFAULT_MAX_TOKENS`; `mise.toml` sets this to `192` so llama.cpp does not fall back to infinite generation.
+
 If `llama-completion` fails while initializing Metal, force CPU execution:
 
 ```bash

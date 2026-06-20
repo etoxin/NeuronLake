@@ -217,13 +217,17 @@ impl std::error::Error for BackendError {
 pub struct LlamaCppSubprocessBackend {
     executable: PathBuf,
     extra_args: Vec<String>,
+    default_max_tokens: u32,
 }
 
 impl LlamaCppSubprocessBackend {
+    pub const DEFAULT_MAX_TOKENS: u32 = 192;
+
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {
             executable: executable.into(),
             extra_args: Vec::new(),
+            default_max_tokens: Self::DEFAULT_MAX_TOKENS,
         }
     }
 
@@ -232,6 +236,11 @@ impl LlamaCppSubprocessBackend {
         extra_args: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
         self.extra_args = extra_args.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn with_default_max_tokens(mut self, default_max_tokens: u32) -> Self {
+        self.default_max_tokens = default_max_tokens.max(1);
         self
     }
 
@@ -327,10 +336,14 @@ impl ExpertBackend for LlamaCppSubprocessBackend {
         command.args(&self.extra_args);
         command.arg("--model").arg(&prepared.model_path);
         command.arg("--prompt").arg(request.prompt_text());
+        command.arg("--n-predict").arg(
+            request
+                .options
+                .max_tokens
+                .unwrap_or(self.default_max_tokens)
+                .to_string(),
+        );
 
-        if let Some(max_tokens) = request.options.max_tokens {
-            command.arg("--n-predict").arg(max_tokens.to_string());
-        }
         if let Some(temperature) = request.options.temperature {
             command.arg("--temp").arg(temperature.to_string());
         }
@@ -546,6 +559,7 @@ server:
         let deltas = backend.stream(&prepared, &request).unwrap();
 
         assert!(completion.content.contains("--model"));
+        assert!(completion.content.contains("--n-predict 16"));
         assert!(completion.content.contains("Write a promise example"));
         assert_eq!(completion.diagnostics.expert_id, "local-js");
         assert_eq!(completion.diagnostics.model_path, model_path);
@@ -556,6 +570,24 @@ server:
             .unwrap()
             .contains("not a benchmark target"));
         assert!(deltas.iter().any(|delta| delta.content.contains("--model")));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn subprocess_backend_caps_generation_when_client_omits_max_tokens() {
+        let dir = unique_temp_dir("default-max-tokens");
+        fs::create_dir_all(&dir).unwrap();
+        let model_path = dir.join("local-js.gguf");
+        fs::write(&model_path, b"fake gguf").unwrap();
+        let registry = registry_with_model(&model_path);
+        let backend = LlamaCppSubprocessBackend::new("/bin/echo").with_default_max_tokens(32);
+        let prepared = backend.prepare(&registry, "local-js").unwrap();
+        let mut request = request();
+        request.options.max_tokens = None;
+
+        let completion = backend.generate(&prepared, &request).unwrap();
+
+        assert!(completion.content.contains("--n-predict 32"));
         fs::remove_dir_all(dir).unwrap();
     }
 }

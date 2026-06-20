@@ -216,6 +216,7 @@ pub enum ChatServerError {
     InvalidRequest(String),
     Router(RouterError),
     Backend(BackendError),
+    GenerationTask(tokio::task::JoinError),
     BindAddress(std::net::AddrParseError),
     Io(std::io::Error),
     Serve(std::io::Error),
@@ -234,6 +235,7 @@ impl fmt::Display for ChatServerError {
             Self::InvalidRequest(message) => write!(f, "{message}"),
             Self::Router(error) => write!(f, "{error}"),
             Self::Backend(error) => write!(f, "{error}"),
+            Self::GenerationTask(error) => write!(f, "generation task failed: {error}"),
             Self::BindAddress(error) => write!(f, "invalid server bind address: {error}"),
             Self::Io(error) => write!(f, "server I/O error: {error}"),
             Self::Serve(error) => write!(f, "server failed: {error}"),
@@ -248,6 +250,7 @@ impl std::error::Error for ChatServerError {
             Self::Io(error) | Self::Serve(error) => Some(error),
             Self::Router(error) => Some(error),
             Self::Backend(error) => Some(error),
+            Self::GenerationTask(error) => Some(error),
             Self::InvalidModel { .. } | Self::InvalidRequest(_) => None,
         }
     }
@@ -297,6 +300,13 @@ impl IntoResponse for ChatServerError {
                 "server_error",
                 None,
                 Some("backend_error".to_string()),
+                error.to_string(),
+            ),
+            Self::GenerationTask(error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                None,
+                Some("generation_task_failed".to_string()),
                 error.to_string(),
             ),
             other => (
@@ -523,9 +533,9 @@ async fn chat_completions(
     validate_request(&state, &request)?;
 
     if request.stream {
-        Ok(streaming_response(&state, &request)?.into_response())
+        Ok(streaming_response(state, request).await?.into_response())
     } else {
-        Ok(Json(non_streaming_response(&state, &request)?).into_response())
+        Ok(Json(non_streaming_response(state, request).await?).into_response())
     }
 }
 
@@ -545,7 +555,7 @@ fn validate_request(
     state: &ChatServerState,
     request: &ChatCompletionRequest,
 ) -> Result<(), ChatServerError> {
-    if request.model != state.model_name {
+    if !model_matches(&request.model, &state.model_name) {
         return Err(ChatServerError::InvalidModel {
             requested: request.model.clone(),
             expected: state.model_name.clone(),
@@ -561,19 +571,30 @@ fn validate_request(
     Ok(())
 }
 
-fn non_streaming_response(
-    state: &ChatServerState,
-    request: &ChatCompletionRequest,
+fn model_matches(requested: &str, expected: &str) -> bool {
+    requested == expected
+        || requested
+            .rsplit_once('/')
+            .is_some_and(|(_, model)| model == expected)
+}
+
+async fn non_streaming_response(
+    state: ChatServerState,
+    request: ChatCompletionRequest,
 ) -> Result<ChatCompletionResponse, ChatServerError> {
-    let generated = state.generator.generate(request)?;
+    let model = state.model_name.clone();
+    let generator = state.generator.clone();
     let prompt_tokens = estimate_messages_tokens(&request.messages);
+    let generated = tokio::task::spawn_blocking(move || generator.generate(&request))
+        .await
+        .map_err(ChatServerError::GenerationTask)??;
     let completion_tokens = estimate_tokens(&generated.content);
 
     Ok(ChatCompletionResponse {
         id: completion_id(),
         object: "chat.completion",
         created: unix_timestamp(),
-        model: state.model_name.clone(),
+        model,
         choices: vec![ChatCompletionChoice {
             index: 0,
             message: AssistantMessage {
@@ -590,14 +611,18 @@ fn non_streaming_response(
     })
 }
 
-fn streaming_response(
-    state: &ChatServerState,
-    request: &ChatCompletionRequest,
+async fn streaming_response(
+    state: ChatServerState,
+    request: ChatCompletionRequest,
 ) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, ChatServerError> {
     let id = completion_id();
     let created = unix_timestamp();
     let model = state.model_name.clone();
+    let generator = state.generator.clone();
     let mut events = Vec::new();
+    let deltas = tokio::task::spawn_blocking(move || generator.stream(&request))
+        .await
+        .map_err(ChatServerError::GenerationTask)??;
 
     events.push(chunk_event(ChatCompletionChunk {
         id: id.clone(),
@@ -614,7 +639,7 @@ fn streaming_response(
         }],
     })?);
 
-    for delta in state.generator.stream(request)? {
+    for delta in deltas {
         events.push(chunk_event(ChatCompletionChunk {
             id: id.clone(),
             object: "chat.completion.chunk",
@@ -1015,6 +1040,36 @@ mod tests {
         assert_eq!(request.options.top_p, Some(0.8));
         assert_eq!(request.options.max_tokens, Some(12));
         assert_eq!(request.ignored_parameters, vec!["presence_penalty"]);
+    }
+
+    #[tokio::test]
+    async fn provider_prefixed_model_alias_is_accepted_for_opencode() {
+        let backend = Arc::new(RecordingBackend::new(["unused"]));
+        let app = router_with_backend(fixture_registry(), "javascript-core", backend.clone());
+        let body = json!({
+            "model": "neuronlake/library-lake-v1",
+            "messages": [{"role": "user", "content": "Use the provider alias"}],
+            "max_tokens": 12
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(body)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["model"], "library-lake-v1");
+        assert_eq!(backend.request_count(), 1);
     }
 
     #[tokio::test]

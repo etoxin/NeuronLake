@@ -8,6 +8,7 @@ HF_XET_HIGH_PERFORMANCE = "1"
 NEURONLAKE_MVP_DIR = "{{config_root}}"
 LAKE_CONFIG = "{{config_root}}/lake.yaml"
 LLAMA_CPP_BIN = "llama-completion"
+NEURONLAKE_DEFAULT_MAX_TOKENS = "192"
 
 [tasks."download:models"]
 description = "Download the MVP GGUF experts from Hugging Face"

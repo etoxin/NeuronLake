@@ -9,6 +9,7 @@ OPENCODE_WORKSPACE = "{{config_root}}"
 NEURONLAKE_MVP_DIR = "{{config_root}}/../neuronlake_mvp"
 LAKE_CONFIG = "{{config_root}}/../neuronlake_mvp/lake.yaml"
 LLAMA_CPP_BIN = "llama-completion"
+NEURONLAKE_DEFAULT_MAX_TOKENS = "192"
 
 [tasks."download:models"]
 description = "Download the NeuronLake MVP models used by this OpenCode example"
@@ -47,16 +48,20 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
 
 [tasks.opencode]
 description = "Launch OpenCode in this workspace using opencode.json"
-run = "opencode"
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode"
 
 [tasks."opencode:ask"]
 description = "Run a non-interactive OpenCode prompt against NeuronLake"
-run = "opencode run \"Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files.\""
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode run \"Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files.\""
+
+[tasks."opencode:debug"]
+description = "Show the OpenCode config using this example's isolated state"
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode debug config"
 
 [tasks.run]
 description = "Launch OpenCode with the NeuronLake provider"
 depends = ["doctor"]
-run = "opencode"
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode"
 
 [tasks.default]
 description = "Check prerequisites and launch OpenCode"

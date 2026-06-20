@@ -18,12 +18,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let llama_bin = env::var("LLAMA_CPP_BIN").unwrap_or_else(|_| "llama-completion".to_string());
     let extra_args = env::var("LLAMA_CPP_ARGS")
         .ok()
-        .map(|args| args.split_whitespace().map(str::to_string).collect::<Vec<_>>())
+        .map(|args| {
+            args.split_whitespace()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
+    let default_max_tokens = env::var("NEURONLAKE_DEFAULT_MAX_TOKENS")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(LlamaCppSubprocessBackend::DEFAULT_MAX_TOKENS);
 
     let registry = load_expert_registry(&lake_path)?;
     let expert_router = ExpertRouter::train(&registry)?;
-    let backend = Arc::new(LlamaCppSubprocessBackend::new(llama_bin).with_extra_args(extra_args));
+    let backend = Arc::new(
+        LlamaCppSubprocessBackend::new(llama_bin)
+            .with_extra_args(extra_args)
+            .with_default_max_tokens(default_max_tokens),
+    );
     let app = router_with_routed_backend(registry.clone(), expert_router, backend);
 
     let host: IpAddr = registry.server().host.parse()?;
