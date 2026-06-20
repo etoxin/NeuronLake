@@ -1,0 +1,63 @@
+[tools]
+rust = "latest"
+python = "3.12"
+uv = "latest"
+
+[env]
+OPENCODE_CONFIG = "{{config_root}}/opencode.json"
+OPENCODE_WORKSPACE = "{{config_root}}"
+NEURONLAKE_MVP_DIR = "{{config_root}}/../neuronlake_mvp"
+LAKE_CONFIG = "{{config_root}}/../neuronlake_mvp/lake.yaml"
+LLAMA_CPP_BIN = "llama-completion"
+
+[tasks."download:models"]
+description = "Download the NeuronLake MVP models used by this OpenCode example"
+run = """
+mkdir -p "${NEURONLAKE_MVP_DIR}/models"
+uv run --no-project --with huggingface_hub hf download Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF qwen2.5-coder-0.5b-instruct-q4_k_m.gguf --local-dir "${NEURONLAKE_MVP_DIR}/models"
+uv run --no-project --with huggingface_hub hf download Qwen/Qwen2.5-0.5B-Instruct-GGUF qwen2.5-0.5b-instruct-q4_k_m.gguf --local-dir "${NEURONLAKE_MVP_DIR}/models"
+"""
+
+[tasks.doctor]
+description = "Check OpenCode and NeuronLake prerequisites"
+run = """
+test -f "${NEURONLAKE_MVP_DIR}/models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf" || { echo "missing coder model; run: mise run download:models"; exit 1; }
+test -f "${NEURONLAKE_MVP_DIR}/models/qwen2.5-0.5b-instruct-q4_k_m.gguf" || { echo "missing general model; run: mise run download:models"; exit 1; }
+command -v "${LLAMA_CPP_BIN}" >/dev/null 2>&1 || { echo "missing ${LLAMA_CPP_BIN}; install llama.cpp or set LLAMA_CPP_BIN"; exit 1; }
+command -v opencode >/dev/null 2>&1 || { echo "missing opencode; install OpenCode before launching this example"; exit 1; }
+cargo check --manifest-path "{{config_root}}/../../Cargo.toml" --example neuronlake_mvp --no-default-features
+"""
+
+[tasks.serve]
+description = "Start NeuronLake for OpenCode"
+depends = ["download:models"]
+run = "cargo run --manifest-path \"{{config_root}}/../../Cargo.toml\" --example neuronlake_mvp --no-default-features -- \"${LAKE_CONFIG}\""
+
+[tasks."api:models"]
+description = "Check the OpenAI-compatible model list endpoint"
+run = "curl -s http://127.0.0.1:8080/v1/models"
+
+[tasks."api:chat"]
+description = "Send an OpenCode-shaped chat request to NeuronLake"
+run = """
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d @"${OPENCODE_WORKSPACE}/request-opencode.json"
+"""
+
+[tasks.opencode]
+description = "Launch OpenCode in this workspace using opencode.json"
+run = "opencode"
+
+[tasks."opencode:ask"]
+description = "Run a non-interactive OpenCode prompt against NeuronLake"
+run = "opencode run \"Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files.\""
+
+[tasks.run]
+description = "Launch OpenCode with the NeuronLake provider"
+depends = ["doctor"]
+run = "opencode"
+
+[tasks.default]
+description = "Check prerequisites and launch OpenCode"
+depends = ["run"]

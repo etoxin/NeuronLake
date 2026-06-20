@@ -1,0 +1,16 @@
+{
+  "model": "neuronlake-mvp",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are assisting inside OpenCode. Be concise and focus on the local workspace."
+    },
+    {
+      "role": "user",
+      "content": "Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files."
+    }
+  ],
+  "stream": false,
+  "temperature": 0.2,
+  "max_tokens": 180
+}

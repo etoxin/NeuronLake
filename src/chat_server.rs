@@ -21,7 +21,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures_util::stream;
 use serde::{Deserialize, Serialize};
@@ -153,6 +153,20 @@ pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelListResponse {
+    pub object: &'static str,
+    pub data: Vec<ModelInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub object: &'static str,
+    pub created: u64,
+    pub owned_by: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -323,6 +337,7 @@ pub fn router_with_generator(
 ) -> Router {
     let state = ChatServerState::new(settings.model_name, generator);
     Router::new()
+        .route("/v1/models", get(list_models))
         .route("/v1/chat/completions", post(chat_completions))
         .with_state(state)
 }
@@ -512,6 +527,18 @@ async fn chat_completions(
     } else {
         Ok(Json(non_streaming_response(&state, &request)?).into_response())
     }
+}
+
+async fn list_models(State(state): State<ChatServerState>) -> Json<ModelListResponse> {
+    Json(ModelListResponse {
+        object: "list",
+        data: vec![ModelInfo {
+            id: state.model_name.clone(),
+            object: "model",
+            created: 0,
+            owned_by: "neuronlake",
+        }],
+    })
 }
 
 fn validate_request(
@@ -826,6 +853,30 @@ mod tests {
                 })
                 .collect())
         }
+    }
+
+    #[tokio::test]
+    async fn model_list_exposes_configured_model_for_opencode() {
+        let app = router_from_settings(test_settings());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/models")
+                    .body(String::new())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(value["object"], "list");
+        assert_eq!(value["data"][0]["id"], "library-lake-v1");
+        assert_eq!(value["data"][0]["object"], "model");
+        assert_eq!(value["data"][0]["owned_by"], "neuronlake");
     }
 
     #[tokio::test]
