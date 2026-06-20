@@ -52,7 +52,7 @@ run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"
 
 [tasks."opencode:ask"]
 description = "Run a non-interactive OpenCode prompt against NeuronLake"
-run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode run --dir \"${OPENCODE_WORKSPACE}\" \"Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files.\""
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode run --dir \"${OPENCODE_WORKSPACE}\" --agent neuronlake \"Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files.\""
 
 [tasks."opencode:debug"]
 description = "Show the OpenCode config using this example's isolated state"

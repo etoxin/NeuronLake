@@ -23,5 +23,54 @@
   },
   "model": "neuronlake/neuronlake-mvp",
   "small_model": "neuronlake/neuronlake-mvp",
-  "snapshot": false
+  "snapshot": false,
+  "tools": {
+    "bash": false,
+    "edit": false,
+    "write": false,
+    "read": false,
+    "glob": false,
+    "grep": false,
+    "task": false,
+    "webfetch": false,
+    "todowrite": false,
+    "skill": false
+  },
+  "default_agent": "neuronlake",
+  "agent": {
+    "neuronlake": {
+      "description": "Review-only NeuronLake MVP demo agent for the bundled sample file",
+      "mode": "primary",
+      "model": "neuronlake/neuronlake-mvp",
+      "prompt": "{file:./prompts/neuronlake-mvp-agent.txt}",
+      "temperature": 0.1,
+      "permission": {
+        "bash": "deny",
+        "edit": "deny",
+        "write": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "task": "deny",
+        "webfetch": "deny",
+        "todowrite": "deny"
+      }
+    },
+    "build": {
+      "model": "neuronlake/neuronlake-mvp",
+      "prompt": "{file:./prompts/neuronlake-mvp-agent.txt}",
+      "temperature": 0.1,
+      "permission": {
+        "bash": "deny",
+        "edit": "deny",
+        "write": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "task": "deny",
+        "webfetch": "deny",
+        "todowrite": "deny"
+      }
+    }
+  }
 }
