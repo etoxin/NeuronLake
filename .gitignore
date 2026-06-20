@@ -19,3 +19,19 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Downloaded Datasets for Examples
+example/**/data/
+example/**/dbpedia_csv/
+example/wikipedia_classifier/wikipedia_weights.bin
+example/wikipedia_classifier/wikipedia_vocab.txt
+
+# Generated Model Weights and Vocabularies
+*.bin
+*.txt
+.venv/
+.mise/
+
+# Compiled Python extensions (placed by maturin)
+neuronguard/*.so
+neuronguard/*.pyd
