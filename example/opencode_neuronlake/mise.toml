@@ -48,11 +48,11 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
 
 [tasks.opencode]
 description = "Launch OpenCode in this workspace using opencode.json"
-run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode"
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode \"${OPENCODE_WORKSPACE}\""
 
 [tasks."opencode:ask"]
 description = "Run a non-interactive OpenCode prompt against NeuronLake"
-run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode run \"Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files.\""
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode run --dir \"${OPENCODE_WORKSPACE}\" \"Inspect sample/buggy-counter.ts and suggest the smallest fix. Do not edit files.\""
 
 [tasks."opencode:debug"]
 description = "Show the OpenCode config using this example's isolated state"
@@ -61,7 +61,7 @@ run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"
 [tasks.run]
 description = "Launch OpenCode with the NeuronLake provider"
 depends = ["doctor"]
-run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode"
+run = "XDG_DATA_HOME=\"{{config_root}}/.opencode-state/data\" XDG_CONFIG_HOME=\"{{config_root}}/.opencode-state/config\" opencode \"${OPENCODE_WORKSPACE}\""
 
 [tasks.default]
 description = "Check prerequisites and launch OpenCode"

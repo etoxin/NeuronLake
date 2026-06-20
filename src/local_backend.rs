@@ -336,13 +336,12 @@ impl ExpertBackend for LlamaCppSubprocessBackend {
         command.args(&self.extra_args);
         command.arg("--model").arg(&prepared.model_path);
         command.arg("--prompt").arg(request.prompt_text());
-        command.arg("--n-predict").arg(
-            request
-                .options
-                .max_tokens
-                .unwrap_or(self.default_max_tokens)
-                .to_string(),
-        );
+        let max_tokens = request
+            .options
+            .max_tokens
+            .unwrap_or(self.default_max_tokens)
+            .clamp(1, self.default_max_tokens);
+        command.arg("--n-predict").arg(max_tokens.to_string());
 
         if let Some(temperature) = request.options.temperature {
             command.arg("--temp").arg(temperature.to_string());
@@ -584,6 +583,24 @@ server:
         let prepared = backend.prepare(&registry, "local-js").unwrap();
         let mut request = request();
         request.options.max_tokens = None;
+
+        let completion = backend.generate(&prepared, &request).unwrap();
+
+        assert!(completion.content.contains("--n-predict 32"));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn subprocess_backend_caps_oversized_client_max_tokens() {
+        let dir = unique_temp_dir("oversized-max-tokens");
+        fs::create_dir_all(&dir).unwrap();
+        let model_path = dir.join("local-js.gguf");
+        fs::write(&model_path, b"fake gguf").unwrap();
+        let registry = registry_with_model(&model_path);
+        let backend = LlamaCppSubprocessBackend::new("/bin/echo").with_default_max_tokens(32);
+        let prepared = backend.prepare(&registry, "local-js").unwrap();
+        let mut request = request();
+        request.options.max_tokens = Some(32_000);
 
         let completion = backend.generate(&prepared, &request).unwrap();
 

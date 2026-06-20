@@ -12,11 +12,16 @@
       },
       "models": {
         "neuronlake-mvp": {
-          "name": "NeuronLake MVP"
+          "name": "NeuronLake MVP",
+          "limit": {
+            "context": 4096,
+            "output": 192
+          }
         }
       }
     }
   },
   "model": "neuronlake/neuronlake-mvp",
-  "small_model": "neuronlake/neuronlake-mvp"
+  "small_model": "neuronlake/neuronlake-mvp",
+  "snapshot": false
 }
