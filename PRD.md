@@ -3,7 +3,7 @@
 ## Project: NeuronLake
 
 **Author:** etoxin  
-**Status:** Draft / Conceptual MVP  
+**Status:** Draft / Two-Milestone Product Plan  
 **Primary Test Harness:** OpenCode via an OpenAI-compatible local endpoint  
 **Target Runtime:** Local developer workstations with consumer CPU/GPU hardware
 
@@ -13,18 +13,18 @@
 
 NeuronLake is a local expert-model runtime for terminal-first coding agents.
 
-Instead of asking one large model to answer every coding request, NeuronLake lets a user build a local swarm of small, highly targeted coding experts. Each expert is a compact model, typically around 0.5B parameters, trained or distilled for a narrow domain such as JavaScript, TanStack Router, React, FastAPI, SQL, Tailwind, or a specific internal codebase.
+Instead of asking one large model to answer every coding request, NeuronLake lets a user build a local lake of small, highly targeted coding experts. Each expert is a compact model, typically around 0.5B parameters, trained, imported, or distilled for a narrow domain such as JavaScript, TanStack Router, React, FastAPI, SQL, Tailwind, or a specific internal codebase.
 
-The user defines the available experts in a YAML configuration file. NeuronLake then uses a larger teacher model, initially Gemma 12B, to help distill targeted behavior into the small expert models. Once the user has added and trained the experts, NeuronGuard is trained as the fast routing layer that decides which expert should receive each incoming coding request.
+The user defines the available experts in a `lake.yaml` configuration file. The first milestone, **The Lake**, focuses on configuration, local expert execution, NeuronGuard routing, and OpenAI-compatible serving. The second milestone, **Teacher-Student Distillation**, adds a larger teacher model, initially Gemma 12B, to help generate datasets, evaluate outputs, and distill targeted behavior into small expert models.
 
 After setup, the user starts the NeuronLake server. NeuronLake exposes a local OpenAI-compatible endpoint that can be used by OpenCode without changes to OpenCode itself.
 
 The goal is a practical local coding runtime:
 
 - Small models for narrow, high-accuracy domains.
-- User-owned expert configuration and training.
+- User-owned expert configuration through `lake.yaml`.
 - Shareable expert models.
-- NeuronGuard-powered routing across the expert swarm.
+- NeuronGuard-powered routing across the expert lake.
 - OpenAI-compatible serving for existing developer agents.
 
 ---
@@ -35,40 +35,69 @@ NeuronLake should make local coding agents more useful on ordinary hardware by r
 
 The intended user flow is:
 
-1. The user creates a `swarm.yaml` file that lists the small expert models they want to use.
+1. The user creates a `lake.yaml` file that lists the small expert models they want to use.
 2. The user adds local or remote model references for each expert.
-3. The user optionally provides domain material, examples, docs, repositories, or prompts for each expert.
-4. NeuronLake uses a teacher model such as Gemma 12B to distill targeted training data or behavior into each small expert.
-5. The user trains or imports the small expert models.
-6. NeuronGuard is trained on the expert set so it can route incoming prompts to the best expert.
-7. The user starts the NeuronLake server.
-8. OpenCode connects to NeuronLake through a local OpenAI-compatible endpoint.
+3. NeuronLake validates the configured experts.
+4. NeuronGuard is trained on routing hints and examples so it can route incoming prompts to the best expert.
+5. The user starts the NeuronLake server.
+6. OpenCode connects to NeuronLake through a local OpenAI-compatible endpoint.
+7. In the second milestone, the user optionally adds a teacher model and training material so NeuronLake can generate datasets, evaluate experts, and support teacher-student distillation.
 
 NeuronLake is not intended to be a monolithic foundation model. It is a local routing and serving layer for user-composed expert models.
 
 ---
 
-## 3. Goals
+## 3. Milestones
 
-### 3.1 MVP Goals
+### 3.1 Milestone 1: The Lake
 
-- Support a user-editable `swarm.yaml` file for defining expert models.
+The Lake is the first shippable product surface. It should work with existing small local models before any teacher-student training is implemented.
+
+Goals:
+
+- Support a user-editable `lake.yaml` file for defining expert models.
 - Allow users to register small local models, initially targeting 0.5B-class GGUF models.
 - Support domain-specific expert definitions such as JavaScript, TanStack Router, React, FastAPI, SQL, Tailwind, and project-specific experts.
-- Provide a distillation workflow using a larger teacher model such as Gemma 12B.
-- Train NeuronGuard as the router over the configured expert set.
+- Train NeuronGuard as the router over the configured expert set using routing hints and examples.
 - Expose an OpenAI-compatible `/v1/chat/completions` endpoint.
 - Support Server-Sent Events streaming for agent compatibility.
 - Validate integration using OpenCode as the primary test harness.
-- Allow users to import, export, and share expert model definitions and trained artifacts.
+- Allow users to import, export, and share expert model definitions and artifacts.
 
-### 3.2 Non-Goals For The First MVP
+The Lake must be useful even when every expert is imported or manually trained outside NeuronLake.
+
+### 3.2 Milestone 2: Teacher-Student Model
+
+The Teacher-Student milestone adds an optional training and distillation layer.
+
+Goals:
+
+- Add teacher model configuration, initially targeting Gemma 12B.
+- Use the teacher model to generate domain-specific training examples.
+- Use the teacher model to evaluate or grade student expert outputs.
+- Generate router training examples for NeuronGuard.
+- Store generated datasets in a human-inspectable format.
+- Add hooks for fine-tuning or adapting small experts where supported.
+- Preserve the ability to import and share trained experts.
+
+This milestone should not block the Lake runtime. Users should be able to run NeuronLake with imported experts before they use teacher-student workflows.
+
+### 3.3 Combined Product Goals
+
+- Keep the runtime local-first.
+- Keep expert configuration explicit and user-owned.
+- Make expert sharing practical.
+- Use NeuronGuard for fast expert selection.
+- Avoid making normal serving depend on a large teacher model.
+
+### 3.4 Non-Goals For The First MVP
 
 - NeuronLake will not initially train foundation models from scratch.
 - NeuronLake will not initially guarantee all models are pinned in memory.
 - NeuronLake will not initially target a 1TB expert library.
 - NeuronLake will not initially require multi-turn memory or KV-cache persistence.
 - NeuronLake will not initially claim frontier-model parity without benchmark evidence.
+- NeuronLake will not initially require automated fine-tuning to run the server.
 
 ---
 
@@ -98,7 +127,23 @@ Each expert should include:
 - Optional routing hints.
 - Optional metadata for sharing and reuse.
 
-### 4.2 Teacher Model
+### 4.2 Lake Configuration
+
+`lake.yaml` is the user-owned source of truth for the local expert lake.
+
+It defines:
+
+- The lake name.
+- Expert model IDs.
+- Local or remote model locations.
+- Expert domains.
+- Routing hints.
+- Optional example prompts.
+- Optional sharing metadata.
+- Server settings.
+- Optional teacher-student settings in Milestone 2.
+
+### 4.3 Teacher Model
 
 The teacher model is a larger model used during setup and training, not necessarily during normal serving.
 
@@ -112,7 +157,7 @@ The teacher model may be used for:
 - Evaluating whether an expert response matches the intended domain behavior.
 - Generating router training examples for NeuronGuard.
 
-### 4.3 NeuronGuard Router
+### 4.4 NeuronGuard Router
 
 NeuronGuard is the fast routing layer.
 
@@ -130,7 +175,7 @@ After the user's experts are added and trained, NeuronLake trains NeuronGuard to
 
 The router does not replace the expert models. It selects the best expert for a request.
 
-### 4.4 OpenAI-Compatible Server
+### 4.5 OpenAI-Compatible Server
 
 NeuronLake exposes a local HTTP API compatible with OpenAI-style clients.
 
@@ -146,46 +191,37 @@ This allows OpenCode to use NeuronLake as if it were an OpenAI-compatible provid
 
 ## 5. User Workflow
 
-### 5.1 Configure Experts
+### 5.1 Configure The Lake
 
-The user creates a `swarm.yaml` file in their workspace or NeuronLake config directory.
+The user creates a `lake.yaml` file in their workspace or NeuronLake config directory.
 
 Example:
 
 ```yaml
-name: frontend-swarm
-teacher:
-  id: gemma-12b
-  model: ./models/gemma-12b.gguf
+name: frontend-lake
 
 experts:
   - id: javascript-core
     domain: JavaScript language and runtime behavior
     model: ./models/javascript-core-0.5b.gguf
-    train:
-      docs:
-        - ./training/javascript/
-      prompts:
-        - Explain JavaScript async behavior with small runnable examples.
     routing_hints:
       - javascript
       - node
       - async
       - promise
+    examples:
+      - Explain JavaScript async behavior with small runnable examples.
 
   - id: tanstack-router
     domain: TanStack Router application code
     model: ./models/tanstack-router-0.5b.gguf
-    train:
-      docs:
-        - ./training/tanstack-router/
-      repos:
-        - ./examples/tanstack-router-app/
     routing_hints:
       - tanstack router
       - createFileRoute
       - routeTree
       - loader
+    examples:
+      - Fix a TanStack Router loader that is not receiving route params.
 
 server:
   host: 127.0.0.1
@@ -193,51 +229,38 @@ server:
   model_name: library-lake-v1
 ```
 
-### 5.2 Distill Experts
+### 5.2 Train NeuronGuard Routing
 
-The user runs a NeuronLake training or preparation command.
-
-The distillation workflow should:
-
-- Read `swarm.yaml`.
-- Validate that configured models and training sources exist.
-- Use the teacher model to generate or refine domain-specific training examples.
-- Save generated examples in a human-inspectable format.
-- Train or fine-tune the small expert models where supported.
-- Produce metadata that explains what each expert is intended to handle.
-
-### 5.3 Train NeuronGuard Routing
-
-After expert preparation, NeuronLake trains NeuronGuard to route requests across the configured expert set.
+In Milestone 1, NeuronLake trains NeuronGuard from the configured expert list.
 
 The routing training set can come from:
 
-- User-provided examples.
 - Expert routing hints.
+- User-provided examples.
 - Documentation terms.
 - Package names and APIs.
-- Teacher-generated examples.
-- Evaluation prompts used during distillation.
+- File extensions.
+- Import statements.
 
 The output is a local router artifact tied to the current expert set.
 
-### 5.4 Start The Server
+### 5.3 Start The Lake Server
 
 The user starts NeuronLake:
 
 ```bash
-neuronlake serve --config swarm.yaml
+neuronlake serve --config lake.yaml
 ```
 
 The server:
 
-- Loads `swarm.yaml`.
+- Loads `lake.yaml`.
 - Loads the NeuronGuard router artifact.
 - Loads or prepares the configured expert models.
 - Starts the OpenAI-compatible HTTP server.
 - Streams responses back to the client.
 
-### 5.5 Test With OpenCode
+### 5.4 Test With OpenCode
 
 OpenCode is the first target integration and test harness.
 
@@ -246,7 +269,7 @@ Example OpenCode config:
 ```json
 {
   "provider": {
-    "neuronlake-swarm": {
+    "neuronlake": {
       "npm": "@ai-sdk/openai-compatible",
       "options": {
         "baseURL": "http://127.0.0.1:8080/v1",
@@ -254,13 +277,46 @@ Example OpenCode config:
       },
       "models": {
         "library-lake-v1": {
-          "name": "NeuronLake Swarm"
+          "name": "NeuronLake"
         }
       }
     }
   },
-  "model": "neuronlake-swarm/library-lake-v1"
+  "model": "neuronlake/library-lake-v1"
 }
+```
+
+### 5.5 Optional Teacher-Student Workflow
+
+The user runs a NeuronLake training or preparation command.
+
+The distillation workflow should:
+
+- Read `lake.yaml`.
+- Validate that configured models and training sources exist.
+- Use the teacher model to generate or refine domain-specific training examples.
+- Save generated examples in a human-inspectable format.
+- Train or fine-tune the small expert models where supported.
+- Produce metadata that explains what each expert is intended to handle.
+
+Optional Milestone 2 `lake.yaml` extension:
+
+```yaml
+teacher:
+  id: gemma-12b
+  model: ./models/gemma-12b.gguf
+
+experts:
+  - id: tanstack-router
+    domain: TanStack Router application code
+    model: ./models/tanstack-router-0.5b.gguf
+    train:
+      docs:
+        - ./training/tanstack-router/
+      repos:
+        - ./examples/tanstack-router-app/
+      prompts:
+        - Generate route loader examples with typed params.
 ```
 
 ---
@@ -271,14 +327,14 @@ Example OpenCode config:
 
 NeuronLake must read a user-editable YAML file that defines:
 
-- Swarm name.
-- Teacher model.
+- Lake name.
 - Expert models.
 - Expert domains.
 - Model paths or remote sources.
-- Optional training sources.
 - Optional routing hints.
+- Optional example prompts.
 - Server configuration.
+- Optional teacher model and training sources in Milestone 2.
 
 The YAML file should remain simple enough for users to edit by hand.
 
@@ -297,7 +353,7 @@ The registry should support:
 
 ### 6.3 Distillation Pipeline
 
-NeuronLake must support a workflow where a teacher model helps prepare small experts.
+In Milestone 2, NeuronLake must support a workflow where a teacher model helps prepare small experts.
 
 The initial implementation may support one or more of:
 
@@ -307,7 +363,7 @@ The initial implementation may support one or more of:
 - Router example generation.
 - Expert evaluation prompts.
 
-The MVP can begin with generated datasets and routing examples before full fine-tuning automation is implemented.
+The first teacher-student implementation can begin with generated datasets and routing examples before full fine-tuning automation is implemented.
 
 ### 6.4 Expert Training Or Import
 
@@ -329,7 +385,7 @@ The trained router should:
 - Predict the best expert for a request.
 - Return confidence or score information where practical.
 - Support debugging output explaining why an expert was selected.
-- Be rebuildable when `swarm.yaml` changes.
+- Be rebuildable when `lake.yaml` changes.
 
 ### 6.6 OpenAI-Compatible Chat Endpoint
 
@@ -404,7 +460,7 @@ For the MVP, one expert should handle each request. Later versions may support m
 ```text
 NeuronLake
 ├── config
-│   └── swarm.yaml parser and validator
+│   └── lake.yaml parser and validator
 ├── registry
 │   └── expert model metadata and artifact tracking
 ├── distillation
@@ -432,44 +488,69 @@ NeuronLake should preserve NeuronGuard as the routing engine while adding the mo
 
 ---
 
-## 9. MVP Implementation Phases
+## 9. Implementation Plan
 
-### Phase 1: Configuration And Server Skeleton
+### 9.1 Milestone 1: The Lake
 
-- Add `swarm.yaml` schema.
+Deliver a working local routed inference server.
+
+Phase 1: Configuration And Server Skeleton
+
+- Add `lake.yaml` schema.
 - Parse and validate expert definitions.
 - Add OpenAI-compatible HTTP server.
 - Add basic `/v1/chat/completions` response shape.
 - Add OpenCode configuration example.
 
-### Phase 2: Local Expert Execution
+Phase 2: Local Expert Execution
 
 - Integrate a GGUF-compatible inference backend.
 - Load one configured expert.
 - Generate non-streaming responses.
 - Add streaming SSE support.
 
-### Phase 3: NeuronGuard Routing
+Phase 3: NeuronGuard Routing
 
 - Extract prompt features for routing.
 - Train NeuronGuard from routing hints and examples.
 - Select an expert per request.
 - Add route debugging output.
 
-### Phase 4: Distillation Workflow
-
-- Add Gemma 12B teacher configuration.
-- Generate expert-specific training examples.
-- Generate router training examples.
-- Store generated datasets for inspection.
-- Add hooks for fine-tuning or importing trained experts.
-
-### Phase 5: Expert Sharing
+Phase 4: Expert Sharing
 
 - Define an expert package format.
 - Add import/export commands.
 - Track version and compatibility metadata.
 - Allow users to reuse community or team experts.
+
+### 9.2 Milestone 2: Teacher-Student Model
+
+Deliver teacher-assisted expert improvement.
+
+Phase 1: Teacher Configuration
+
+- Add optional teacher section to `lake.yaml`.
+- Validate the teacher model path and runtime requirements.
+- Keep teacher loading separate from normal serving.
+
+Phase 2: Dataset Generation
+
+- Generate expert-specific training examples.
+- Generate router training examples.
+- Store generated datasets for inspection.
+- Preserve provenance from docs, repos, and prompts.
+
+Phase 3: Expert Evaluation
+
+- Use the teacher model to grade or compare student expert outputs.
+- Track per-expert evaluation results.
+- Identify weak domains that need more examples.
+
+Phase 4: Fine-Tuning Hooks
+
+- Add hooks for fine-tuning or adapter generation where supported.
+- Support importing newly trained expert artifacts.
+- Rebuild the NeuronGuard router after expert changes.
 
 ---
 
@@ -484,6 +565,7 @@ MVP targets:
 - Streaming should begin as soon as the selected expert starts producing tokens.
 - The runtime should support at least one local 0.5B-class expert model.
 - The runtime should be designed to grow toward several resident experts as backend support allows.
+- The Lake milestone should not require a teacher model to serve requests.
 
 Future targets:
 
@@ -498,7 +580,7 @@ Future targets:
 
 - Which GGUF inference backend should be used first: direct llama.cpp bindings, a Rust crate, or a subprocess wrapper?
 - What is the first supported format for training or fine-tuning 0.5B experts?
-- Should NeuronLake generate datasets only, or automate the full fine-tuning loop in the MVP?
+- Should Teacher-Student Milestone 2 generate datasets only, or automate the full fine-tuning loop?
 - How should shared expert packages reference model weights that may be too large for normal source control?
 - Should low-confidence routing fall back to the teacher model, a default expert, or an error response?
 - How much of the router explanation should be exposed to users during normal OpenCode sessions?
@@ -507,9 +589,9 @@ Future targets:
 
 ## 12. Success Criteria
 
-The MVP is successful when:
+### 12.1 Milestone 1: The Lake
 
-- A user can define at least two small experts in `swarm.yaml`.
+- A user can define at least two small experts in `lake.yaml`.
 - NeuronLake can validate the config and prepare the expert registry.
 - NeuronGuard can be trained to route between those experts.
 - NeuronLake can start a local OpenAI-compatible server.
@@ -518,3 +600,11 @@ The MVP is successful when:
 - NeuronLake can stream an OpenAI-compatible response back to OpenCode.
 - Expert configuration and trained artifacts can be exported or reused by another user.
 
+### 12.2 Milestone 2: Teacher-Student Model
+
+- A user can configure Gemma 12B or another teacher model in `lake.yaml`.
+- NeuronLake can generate expert-specific datasets from docs, repos, prompts, or examples.
+- NeuronLake can generate router training examples for NeuronGuard.
+- Generated datasets are saved in a human-inspectable format.
+- Teacher-generated artifacts can be used to improve or retrain student experts.
+- The Lake server remains usable without loading the teacher model.
