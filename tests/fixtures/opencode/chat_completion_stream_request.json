@@ -1,0 +1,16 @@
+{
+  "model": "library-lake-v1",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are concise."
+    },
+    {
+      "role": "user",
+      "content": "Stream this OpenCode response."
+    }
+  ],
+  "stream": true,
+  "temperature": 0.2,
+  "max_tokens": 64
+}

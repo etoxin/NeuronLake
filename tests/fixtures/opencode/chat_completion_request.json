@@ -1,0 +1,16 @@
+{
+  "model": "library-lake-v1",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are concise."
+    },
+    {
+      "role": "user",
+      "content": "Fix this OpenCode request path."
+    }
+  ],
+  "stream": false,
+  "temperature": 0.2,
+  "max_tokens": 64
+}

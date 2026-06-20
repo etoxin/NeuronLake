@@ -13,6 +13,7 @@
 // limitations under the License.
 
 
+pub mod chat_server;
 pub mod guard;
 pub mod lake_config;
 pub mod memory;

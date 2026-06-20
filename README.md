@@ -36,6 +36,32 @@ Relative local paths are resolved from the directory containing `lake.yaml`, not
 
 Optional expert metadata can include `routing_hints`, `examples`, `sharing`, `version`, `compatibility`, and `training_status`. The Lake runtime does not require a `teacher` section; teacher-student configuration belongs to later offline dataset and evaluation workflows.
 
+### OpenCode Provider Configuration
+
+When the local chat server is started with the example settings above, OpenCode can use NeuronLake through an OpenAI-compatible `/v1` base URL:
+
+```json
+{
+  "provider": {
+    "neuronlake": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "apiKey": "neuronlake-handshake"
+      },
+      "models": {
+        "library-lake-v1": {
+          "name": "NeuronLake"
+        }
+      }
+    }
+  },
+  "model": "neuronlake/library-lake-v1"
+}
+```
+
+The server exposes `POST /v1/chat/completions`. Until local expert execution is wired in, the endpoint returns deterministic placeholder responses while preserving OpenAI-compatible non-streaming and streaming response shapes.
+
 ---
 
 ## The Technology (How it works)
