@@ -14,6 +14,7 @@
 
 
 pub mod guard;
+pub mod lake_config;
 pub mod memory;
 pub mod neuron_guard;
 pub mod queue;

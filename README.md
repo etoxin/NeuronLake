@@ -6,6 +6,38 @@ NeuronGuard is not a deep learning matrix-multiplication library. It is a highly
 
 ---
 
+## NeuronLake Lake Configuration
+
+NeuronLake uses `lake.yaml` as the user-owned source of truth for the local expert lake. The Milestone 1 schema is intentionally small: a lake name, one or more expert definitions, and server settings for the future OpenAI-compatible endpoint.
+
+```yaml
+name: frontend-lake
+
+experts:
+  - id: javascript-core
+    domain: JavaScript language and runtime behavior
+    model: ./models/javascript-core-0.5b.gguf
+    routing_hints:
+      - javascript
+      - node
+      - promise
+    examples:
+      - Explain JavaScript async behavior with small runnable examples.
+
+server:
+  host: 127.0.0.1
+  port: 8080
+  model_name: library-lake-v1
+```
+
+Each expert must define a stable `id`, a non-empty `domain`, and a model reference. The shorthand `model: ./path/to/model.gguf` form is treated as a local model path unless it looks like a remote reference such as `https://...` or `hf://...`. Detailed model references can use `path`, `remote`, or `imported`, with an optional `cache_path`.
+
+Relative local paths are resolved from the directory containing `lake.yaml`, not from the process working directory. This keeps a lake portable when the server is started from another folder.
+
+Optional expert metadata can include `routing_hints`, `examples`, `sharing`, `version`, `compatibility`, and `training_status`. The Lake runtime does not require a `teacher` section; teacher-student configuration belongs to later offline dataset and evaluation workflows.
+
+---
+
 ## The Technology (How it works)
 
 Instead of dense floating-point matrices, NeuronGuard models intelligence as a network of **cache-aligned, thread-bounded neurons** that communicate via discrete event spikes. 
