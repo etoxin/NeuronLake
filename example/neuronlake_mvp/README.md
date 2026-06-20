@@ -6,7 +6,7 @@ This example is the first end-to-end NeuronLake MVP check:
 - `mise.toml` downloads real GGUF model files from Hugging Face.
 - The Cargo example trains the NeuronGuard router from `lake.yaml`.
 - The server exposes `POST /v1/chat/completions` on `127.0.0.1:8080`.
-- Requests are routed to one selected expert before `llama-cli` generates the response.
+- Requests are routed to one selected expert before `llama-completion` generates the response.
 
 The example uses the official Qwen GGUF repositories:
 
@@ -19,16 +19,16 @@ Downloads use the current Hugging Face `hf download` CLI through `uv`, with `HF_
 
 ## Prerequisites
 
-Install `mise` and `llama.cpp` with `llama-cli` available on PATH. On macOS:
+Install `mise` and `llama.cpp` with `llama-completion` available on PATH. On macOS:
 
 ```bash
 brew install llama.cpp
 ```
 
-If your binary is not named `llama-cli`, set `LLAMA_CPP_BIN`:
+If your binary is not named `llama-completion`, set `LLAMA_CPP_BIN`:
 
 ```bash
-export LLAMA_CPP_BIN=/path/to/llama-cli
+export LLAMA_CPP_BIN=/path/to/llama-completion
 ```
 
 ## Run
@@ -90,7 +90,13 @@ This is intentionally small but real:
 - NeuronGuard router training
 - routed backend selection per chat request
 - local GGUF model preparation
-- subprocess generation through `llama-cli`
+- subprocess generation through `llama-completion`
 - OpenAI-compatible JSON responses
 
-Generation starts a fresh `llama-cli` process per request. That is slow but useful for the MVP because it keeps the server simple and exercises the local expert path without a resident model manager.
+Generation starts a fresh `llama-completion` process per request. That is slow but useful for the MVP because it keeps the server simple and exercises the local expert path without a resident model manager.
+
+If `llama-completion` fails while initializing Metal, force CPU execution:
+
+```bash
+LLAMA_CPP_ARGS="--device none --no-op-offload --no-kv-offload" mise run serve
+```

@@ -17,7 +17,7 @@ use serde_json::Value;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 pub trait ExpertBackend: Send + Sync + 'static {
@@ -316,6 +316,14 @@ impl ExpertBackend for LlamaCppSubprocessBackend {
     ) -> Result<BackendCompletion, BackendError> {
         let started = Instant::now();
         let mut command = Command::new(&self.executable);
+        command.stdin(Stdio::null());
+        command.args([
+            "--no-conversation",
+            "--no-display-prompt",
+            "--simple-io",
+            "--verbosity",
+            "1",
+        ]);
         command.args(&self.extra_args);
         command.arg("--model").arg(&prepared.model_path);
         command.arg("--prompt").arg(request.prompt_text());

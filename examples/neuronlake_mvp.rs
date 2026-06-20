@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .or_else(|| env::var("LAKE_CONFIG").ok())
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("example/neuronlake_mvp/lake.yaml"));
-    let llama_bin = env::var("LLAMA_CPP_BIN").unwrap_or_else(|_| "llama-cli".to_string());
+    let llama_bin = env::var("LLAMA_CPP_BIN").unwrap_or_else(|_| "llama-completion".to_string());
     let extra_args = env::var("LLAMA_CPP_ARGS")
         .ok()
         .map(|args| args.split_whitespace().map(str::to_string).collect::<Vec<_>>())
