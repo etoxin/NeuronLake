@@ -12,15 +12,16 @@
 
 ## 3. Dataset Generation
 
-- [ ] 3.1 Define generated expert dataset record schema.
-- [ ] 3.2 Define generated router example record schema.
+- [ ] 3.1 Define generated expert dataset record schema with expert ID, prompt/task, expected behavior, tags, difficulty, teacher identity, generation settings, quality status, and provenance.
+- [ ] 3.2 Define generated router example record schema with target expert ID, optional negative candidate expert IDs, prompt/context, tags, difficulty, teacher identity, generation settings, quality status, and provenance.
 - [ ] 3.3 Implement the teacher runtime boundary used by dataset generation.
 - [ ] 3.4 Generate expert-specific examples from configured source material.
 - [ ] 3.5 Generate router examples labeled with target expert IDs.
+- [ ] 3.6 Generate boundary and negative router examples for ambiguous or near-domain prompts.
 
 ## 4. Outputs And Provenance
 
-- [ ] 4.1 Write generated records in a human-inspectable structured text format.
-- [ ] 4.2 Record provenance for source material, expert ID, command, and teacher model identity.
-- [ ] 4.3 Add tests for output file shape and provenance fields.
-- [ ] 4.4 Document that dataset generation is optional and outside normal serving.
+- [ ] 4.1 Write generated records in a human-inspectable structured text format such as JSONL.
+- [ ] 4.2 Record provenance for source material, expert ID, command, teacher model identity, and generation settings.
+- [ ] 4.3 Add tests for output file shape, metadata fields, quality status, and provenance fields.
+- [ ] 4.4 Document that dataset generation is optional, offline, and outside normal serving.
