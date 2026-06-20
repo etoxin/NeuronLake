@@ -13,6 +13,9 @@
 // limitations under the License.
 
 use crate::lake_config::{ExpertRegistry, RuntimeServerSettings};
+use crate::local_backend::{
+    BackendError, BackendMessage, BackendRequest, ExpertBackend, GenerationOptions,
+};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::sse::{Event, Sse};
@@ -196,6 +199,7 @@ pub struct OpenAiError {
 pub enum ChatServerError {
     InvalidModel { requested: String, expected: String },
     InvalidRequest(String),
+    Backend(BackendError),
     BindAddress(std::net::AddrParseError),
     Io(std::io::Error),
     Serve(std::io::Error),
@@ -212,6 +216,7 @@ impl fmt::Display for ChatServerError {
                 "requested model '{requested}' does not match configured model '{expected}'"
             ),
             Self::InvalidRequest(message) => write!(f, "{message}"),
+            Self::Backend(error) => write!(f, "{error}"),
             Self::BindAddress(error) => write!(f, "invalid server bind address: {error}"),
             Self::Io(error) => write!(f, "server I/O error: {error}"),
             Self::Serve(error) => write!(f, "server failed: {error}"),
@@ -224,8 +229,15 @@ impl std::error::Error for ChatServerError {
         match self {
             Self::BindAddress(error) => Some(error),
             Self::Io(error) | Self::Serve(error) => Some(error),
+            Self::Backend(error) => Some(error),
             Self::InvalidModel { .. } | Self::InvalidRequest(_) => None,
         }
+    }
+}
+
+impl From<BackendError> for ChatServerError {
+    fn from(error: BackendError) -> Self {
+        Self::Backend(error)
     }
 }
 
@@ -248,6 +260,13 @@ impl IntoResponse for ChatServerError {
                 None,
                 Some("invalid_request".to_string()),
                 message,
+            ),
+            Self::Backend(error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                None,
+                Some("backend_error".to_string()),
+                error.to_string(),
             ),
             other => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -291,6 +310,22 @@ pub fn router_with_generator(
         .with_state(state)
 }
 
+pub fn router_with_backend(
+    registry: ExpertRegistry,
+    selected_expert_id: impl Into<String>,
+    backend: Arc<dyn ExpertBackend>,
+) -> Router {
+    let settings = registry.server().clone();
+    router_with_generator(
+        settings,
+        Arc::new(BackendChatGenerator::new(
+            registry,
+            selected_expert_id,
+            backend,
+        )),
+    )
+}
+
 pub async fn serve_from_registry(registry: &ExpertRegistry) -> Result<(), ChatServerError> {
     serve_settings(registry.server().clone()).await
 }
@@ -307,6 +342,76 @@ pub async fn serve_settings(settings: RuntimeServerSettings) -> Result<(), ChatS
     axum::serve(listener, router_from_settings(settings))
         .await
         .map_err(ChatServerError::Serve)
+}
+
+pub struct BackendChatGenerator {
+    registry: Arc<ExpertRegistry>,
+    selected_expert_id: String,
+    backend: Arc<dyn ExpertBackend>,
+}
+
+impl BackendChatGenerator {
+    pub fn new(
+        registry: ExpertRegistry,
+        selected_expert_id: impl Into<String>,
+        backend: Arc<dyn ExpertBackend>,
+    ) -> Self {
+        Self {
+            registry: Arc::new(registry),
+            selected_expert_id: selected_expert_id.into(),
+            backend,
+        }
+    }
+
+    fn backend_request(&self, request: &ChatCompletionRequest) -> BackendRequest {
+        let ignored_parameters = request.extra.keys().cloned().collect();
+
+        BackendRequest {
+            expert_id: self.selected_expert_id.clone(),
+            model: request.model.clone(),
+            messages: request
+                .messages
+                .iter()
+                .map(|message| BackendMessage {
+                    role: message.role.clone(),
+                    content: message.content_text().unwrap_or_default(),
+                })
+                .collect(),
+            options: GenerationOptions {
+                temperature: request.temperature,
+                top_p: request.top_p,
+                max_tokens: request.max_tokens,
+                stop: request.stop.clone(),
+            },
+            ignored_parameters,
+        }
+    }
+}
+
+impl ChatGenerator for BackendChatGenerator {
+    fn generate(&self, request: &ChatCompletionRequest) -> Result<GeneratedChat, ChatServerError> {
+        let backend_request = self.backend_request(request);
+        let prepared = self
+            .backend
+            .prepare(&self.registry, &self.selected_expert_id)?;
+        let completion = self.backend.generate(&prepared, &backend_request)?;
+        Ok(GeneratedChat {
+            content: completion.content,
+        })
+    }
+
+    fn stream(&self, request: &ChatCompletionRequest) -> Result<Vec<String>, ChatServerError> {
+        let backend_request = self.backend_request(request);
+        let prepared = self
+            .backend
+            .prepare(&self.registry, &self.selected_expert_id)?;
+        Ok(self
+            .backend
+            .stream(&prepared, &backend_request)?
+            .into_iter()
+            .map(|delta| delta.content)
+            .collect())
+    }
 }
 
 async fn chat_completions(
@@ -521,9 +626,15 @@ pub fn opencode_provider_example(base_url: &str, model_name: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lake_config::load_expert_registry;
+    use crate::local_backend::{
+        BackendCompletion, BackendDelta, BackendDiagnostics, BackendTiming, PreparedExpert,
+    };
     use axum::body::to_bytes;
     use axum::http::header::CONTENT_TYPE;
     use axum::http::{Request, StatusCode};
+    use std::path::PathBuf;
+    use std::sync::Mutex;
     use tower::ServiceExt;
 
     fn test_settings() -> RuntimeServerSettings {
@@ -541,6 +652,93 @@ mod tests {
             include_str!("../tests/fixtures/opencode/chat_completion_request.json")
         }
         .to_string()
+    }
+
+    fn fixture_registry() -> ExpertRegistry {
+        load_expert_registry(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/lake/valid_two_experts/lake.yaml"),
+        )
+        .unwrap()
+    }
+
+    struct RecordingBackend {
+        requests: Mutex<Vec<BackendRequest>>,
+        deltas: Vec<String>,
+    }
+
+    impl RecordingBackend {
+        fn new(deltas: impl IntoIterator<Item = impl Into<String>>) -> Self {
+            Self {
+                requests: Mutex::new(Vec::new()),
+                deltas: deltas.into_iter().map(Into::into).collect(),
+            }
+        }
+
+        fn request_count(&self) -> usize {
+            self.requests.lock().unwrap().len()
+        }
+
+        fn last_request(&self) -> BackendRequest {
+            self.requests.lock().unwrap().last().unwrap().clone()
+        }
+    }
+
+    impl ExpertBackend for RecordingBackend {
+        fn prepare(
+            &self,
+            registry: &ExpertRegistry,
+            expert_id: &str,
+        ) -> Result<PreparedExpert, BackendError> {
+            let expert = registry
+                .get(expert_id)
+                .ok_or_else(|| BackendError::ExpertNotFound {
+                    expert_id: expert_id.to_string(),
+                })?;
+            Ok(PreparedExpert {
+                expert_id: expert.id.clone(),
+                domain: expert.domain.clone(),
+                model_path: PathBuf::from("/tmp/test-model.gguf"),
+                backend_name: "recording-backend".to_string(),
+                preparation: BackendTiming { elapsed_micros: 1 },
+            })
+        }
+
+        fn generate(
+            &self,
+            prepared: &PreparedExpert,
+            request: &BackendRequest,
+        ) -> Result<BackendCompletion, BackendError> {
+            self.requests.lock().unwrap().push(request.clone());
+            Ok(BackendCompletion {
+                content: format!("backend response from {}", prepared.expert_id),
+                diagnostics: BackendDiagnostics {
+                    backend_name: prepared.backend_name.clone(),
+                    expert_id: prepared.expert_id.clone(),
+                    model_path: prepared.model_path.clone(),
+                    preparation: prepared.preparation,
+                    generation: BackendTiming { elapsed_micros: 2 },
+                    note: Some("test double timing is not a benchmark target".to_string()),
+                },
+            })
+        }
+
+        fn stream(
+            &self,
+            prepared: &PreparedExpert,
+            request: &BackendRequest,
+        ) -> Result<Vec<BackendDelta>, BackendError> {
+            self.requests.lock().unwrap().push(request.clone());
+            Ok(self
+                .deltas
+                .iter()
+                .enumerate()
+                .map(|(index, content)| BackendDelta {
+                    content: format!("{}:{content}", prepared.expert_id),
+                    index,
+                })
+                .collect())
+        }
     }
 
     #[tokio::test]
@@ -636,6 +834,83 @@ mod tests {
         assert!(text.contains("OpenCode "));
         assert!(text.contains("response."));
         assert!(text.contains("data: [DONE]"));
+    }
+
+    #[tokio::test]
+    async fn backend_generator_calls_selected_expert_with_generation_options() {
+        let backend = Arc::new(RecordingBackend::new(["unused"]));
+        let app = router_with_backend(fixture_registry(), "javascript-core", backend.clone());
+        let body = json!({
+            "model": "library-lake-v1",
+            "messages": [{"role": "user", "content": "Use the backend"}],
+            "temperature": 0.3,
+            "top_p": 0.8,
+            "max_tokens": 12,
+            "presence_penalty": 0.1
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(body)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            value["choices"][0]["message"]["content"],
+            "backend response from javascript-core"
+        );
+
+        assert_eq!(backend.request_count(), 1);
+        let request = backend.last_request();
+        assert_eq!(request.expert_id, "javascript-core");
+        assert_eq!(request.options.temperature, Some(0.3));
+        assert_eq!(request.options.top_p, Some(0.8));
+        assert_eq!(request.options.max_tokens, Some(12));
+        assert_eq!(request.ignored_parameters, vec!["presence_penalty"]);
+    }
+
+    #[tokio::test]
+    async fn backend_stream_deltas_become_ordered_sse_chunks() {
+        let backend = Arc::new(RecordingBackend::new(["first ", "second"]));
+        let app = router_with_backend(fixture_registry(), "javascript-core", backend.clone());
+        let body = json!({
+            "model": "library-lake-v1",
+            "messages": [{"role": "user", "content": "Stream through backend"}],
+            "stream": true
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(body)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8(body.to_vec()).unwrap();
+
+        let first = text.find("javascript-core:first ").unwrap();
+        let second = text.find("javascript-core:second").unwrap();
+        assert!(first < second);
+        assert!(text.contains("data: [DONE]"));
+        assert_eq!(backend.request_count(), 1);
     }
 
     #[test]
