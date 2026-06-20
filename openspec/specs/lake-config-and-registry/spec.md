@@ -35,6 +35,13 @@ The system SHALL validate configured server host, port, and exposed model name b
 - **WHEN** `lake.yaml` configures a server port outside the valid TCP port range
 - **THEN** validation fails with an error that identifies the invalid port
 
+### Requirement: Preserve configured server model identity
+The lake registry SHALL expose the configured `server.model_name` as the public model identity used by OpenAI-compatible endpoints and examples.
+
+#### Scenario: Server model name becomes public API model
+- **WHEN** `lake.yaml` configures `server.model_name`
+- **THEN** the runtime registry exposes that model name for `/v1/models`, chat completion validation, and OpenCode provider configuration
+
 ### Requirement: Build expert registry
 The system SHALL build a runtime expert registry from validated configuration.
 
@@ -49,10 +56,16 @@ The system SHALL support registry metadata for local model paths, downloaded cac
 - **WHEN** an expert is configured with imported package metadata and compatibility information
 - **THEN** the registry preserves that metadata without requiring the model to be trained inside NeuronLake
 
+### Requirement: Support imported local GGUF experts in MVP examples
+The lake registry SHALL support manually imported local GGUF experts whose metadata records source, sharing, compatibility, version, and training status without requiring a teacher model.
+
+#### Scenario: Imported GGUF metadata loads without teacher configuration
+- **WHEN** `lake.yaml` defines local GGUF experts with sharing, compatibility, version, and imported training-status metadata but no teacher section
+- **THEN** validation and registry construction succeed and preserve that metadata for routing, serving, and sharing components
+
 ### Requirement: Keep Milestone 1 independent from teacher configuration
 The system SHALL allow Milestone 1 validation and registry construction to succeed without any teacher model configuration.
 
 #### Scenario: Lake runtime config has no teacher section
 - **WHEN** `lake.yaml` contains experts and server settings but no `teacher` section
 - **THEN** validation and registry construction succeed for Milestone 1 runtime use
-

@@ -24,6 +24,13 @@ The system SHALL allow a package manifest to reference large model artifacts wit
 - **WHEN** an expert package uses an external model artifact reference
 - **THEN** package validation records the reference without requiring the weight file to be stored in source control
 
+### Requirement: Preserve external source metadata for MVP experts
+The system SHALL preserve source and compatibility metadata for shareable experts that reference external GGUF artifacts such as Hugging Face model files.
+
+#### Scenario: Hugging Face GGUF source metadata is preserved
+- **WHEN** an expert definition references a local GGUF artifact downloaded from an external source and includes sharing source, license, compatibility, and training-status metadata
+- **THEN** the registry and sharing metadata preserve those fields without requiring the large model artifact to be embedded in source control
+
 ### Requirement: Validate package before import
 The system SHALL validate package manifest shape, compatibility metadata, duplicate expert IDs, and artifact availability before importing an expert into a lake.
 
@@ -44,3 +51,10 @@ The system SHALL preserve package training metadata and compatibility metadata e
 #### Scenario: Unknown optional metadata is preserved
 - **WHEN** a package contains optional training metadata not used by the current serving runtime
 - **THEN** the metadata remains available for future inspection or teacher-student workflows
+
+### Requirement: Keep package metadata useful before training workflows
+The system SHALL allow imported or manually configured expert metadata to be exported, inspected, or routed before any teacher-student training workflow exists.
+
+#### Scenario: Imported expert is usable before distillation
+- **WHEN** an expert has imported metadata and a compatible local model artifact
+- **THEN** the expert remains available for registry inspection, routing, serving, and future export without requiring distillation state

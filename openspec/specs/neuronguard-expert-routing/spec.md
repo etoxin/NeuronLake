@@ -32,11 +32,11 @@ The system SHALL detect when a persisted router artifact is stale because releva
 - **THEN** the system reports the router artifact as stale or rebuilds it before routing requests
 
 ### Requirement: Select one expert per MVP request
-The system SHALL select one expert ID for each routed chat completion request in the MVP.
+The system SHALL select one expert ID for each routed chat completion request in the MVP before backend preparation and generation begin.
 
 #### Scenario: Request is routed before generation
-- **WHEN** a valid chat request is received and a current router artifact is available
-- **THEN** the system predicts a single expert ID before backend generation starts
+- **WHEN** a valid chat request is received and a trained router instance is available for the current expert registry
+- **THEN** the system predicts a single expert ID and passes that expert ID to the backend generation request
 
 ### Requirement: Expose routing confidence or scores
 The system SHALL expose routing confidence or score information where practical for route inspection and debugging.
@@ -55,3 +55,10 @@ The system SHALL provide opt-in debugging output that explains why an expert was
 #### Scenario: Debug route output shows contributing signals
 - **WHEN** route debugging is enabled for a request or inspection command
 - **THEN** the output includes selected expert ID and relevant contributing routing signals where available
+
+### Requirement: Keep normal routed chat output clean
+The system SHALL keep route selection metadata, confidence values, scores, and debug signals out of normal assistant message content.
+
+#### Scenario: Routed backend response omits route debug text
+- **WHEN** a normal chat completion request is routed to an expert before backend generation
+- **THEN** the assistant message content contains the backend-generated answer without injected route explanation, confidence, or score text
