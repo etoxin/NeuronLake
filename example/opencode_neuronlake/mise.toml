@@ -9,7 +9,7 @@ OPENCODE_WORKSPACE = "{{config_root}}"
 NEURONLAKE_MVP_DIR = "{{config_root}}/../neuronlake_mvp"
 LAKE_CONFIG = "{{config_root}}/../neuronlake_mvp/lake.yaml"
 LLAMA_CPP_BIN = "llama-completion"
-NEURONLAKE_DEFAULT_MAX_TOKENS = "192"
+NEURONLAKE_DEFAULT_MAX_TOKENS = "104"
 
 [tasks."download:models"]
 description = "Download the NeuronLake MVP models used by this OpenCode example"

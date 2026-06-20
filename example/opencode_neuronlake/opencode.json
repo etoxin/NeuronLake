@@ -15,7 +15,7 @@
           "name": "NeuronLake MVP",
           "limit": {
             "context": 4096,
-            "output": 192
+            "output": 104
           }
         }
       }
@@ -42,7 +42,7 @@
       "description": "Review-only NeuronLake MVP demo agent for the bundled sample file",
       "mode": "primary",
       "model": "neuronlake/neuronlake-mvp",
-      "prompt": "{file:./prompts/neuronlake-mvp-agent.txt}",
+      "prompt": "{file:./prompts/neuronlake-mvp-agent.md}",
       "temperature": 0.1,
       "permission": {
         "bash": "deny",
@@ -58,7 +58,7 @@
     },
     "build": {
       "model": "neuronlake/neuronlake-mvp",
-      "prompt": "{file:./prompts/neuronlake-mvp-agent.txt}",
+      "prompt": "{file:./prompts/neuronlake-mvp-agent.md}",
       "temperature": 0.1,
       "permission": {
         "bash": "deny",

@@ -47,6 +47,8 @@ Inside OpenCode, ask:
 Inspect sample/buggy-counter.ts and suggest the smallest immutable fix. Do not edit files.
 ```
 
+Use a new OpenCode session after changing `opencode.json`. This example sets `default_agent` to `neuronlake`, a review-only no-tool agent with a short prompt in `prompts/neuronlake-mvp-agent.md`.
+
 You can also run a non-interactive OpenCode prompt:
 
 ```bash
@@ -56,6 +58,7 @@ mise run opencode:ask
 ## Files
 
 - `opencode.json` configures OpenCode to use NeuronLake.
+- `prompts/neuronlake-mvp-agent.md` keeps the OpenCode prompt small enough for the local MVP model.
 - `mise.toml` starts NeuronLake, checks prerequisites, and launches OpenCode.
 - `request-opencode.json` is a direct API smoke test with an OpenCode-style system message.
 - `sample/buggy-counter.ts` gives OpenCode a small local file to inspect.
@@ -66,7 +69,9 @@ This example reuses the sibling `example/neuronlake_mvp/lake.yaml` and model fil
 
 The `mise` OpenCode tasks use isolated OpenCode state under `.opencode-state/` and force the OpenCode workspace to this example root. This keeps the example reproducible, avoids failures from an existing global OpenCode SQLite state, and works even if you run `mise` from `sample/`. The state directory is ignored by Git.
 
-OpenCode can request very large generations; this example advertises a 192-token output limit in `opencode.json`, disables OpenCode snapshots for this nested Git workspace, and the server enforces `NEURONLAKE_DEFAULT_MAX_TOKENS=192` as both the fallback and upper bound for llama.cpp.
+OpenCode can request very large generations; this example advertises a 104-token output limit in `opencode.json`, disables OpenCode snapshots for this nested Git workspace, and the server enforces `NEURONLAKE_DEFAULT_MAX_TOKENS=104` as both the fallback and upper bound for llama.cpp.
+
+The bundled 0.5B model is enough to prove OpenCode can talk to NeuronLake through an OpenAI-compatible API, but it is not a real OpenCode coding-agent model. The example disables tools and uses a constrained review prompt because the full OpenCode build agent prompt and tool schemas are too large and complex for this MVP model.
 
 If `llama-completion` fails while initializing Metal, force CPU execution for the server:
 
