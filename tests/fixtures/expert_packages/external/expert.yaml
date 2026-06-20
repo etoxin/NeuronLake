@@ -1,0 +1,21 @@
+manifest_version: 1
+expert_id: rust-shared
+domain: Rust async and systems programming
+model:
+  external_path: /tmp/neuronlake/rust-shared.gguf
+routing_hints:
+  - rust
+  - tokio
+  - borrow checker
+examples:
+  - Diagnose a Tokio task lifetime error.
+version: 0.3.0
+sharing:
+  package: rust-shared
+  description: Rust-focused shared expert with externally managed weights.
+compatibility:
+  backend: llama.cpp
+  model_format: gguf
+training_status:
+  state: imported
+  dataset: external

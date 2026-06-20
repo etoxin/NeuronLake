@@ -14,6 +14,7 @@
 
 
 pub mod chat_server;
+pub mod expert_package;
 pub mod expert_router;
 pub mod guard;
 pub mod lake_config;

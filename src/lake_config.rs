@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct LakeConfig {
     pub name: Option<String>,
     #[serde(default)]
@@ -131,7 +131,7 @@ impl LakeConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ExpertConfig {
     pub id: Option<String>,
     pub domain: Option<String>,
@@ -150,21 +150,21 @@ pub struct ExpertConfig {
     pub training_status: Option<TrainingStatus>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ServerConfig {
     pub host: Option<String>,
     pub port: Option<u32>,
     pub model_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum ModelReferenceConfig {
     Shorthand(String),
     Detailed(DetailedModelReference),
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct DetailedModelReference {
     #[serde(default, alias = "local")]
     pub path: Option<String>,
@@ -176,7 +176,7 @@ pub struct DetailedModelReference {
     pub cache_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct SharingMetadata {
     #[serde(default)]
     pub package: Option<String>,
@@ -190,7 +190,7 @@ pub struct SharingMetadata {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct CompatibilityMetadata {
     #[serde(default)]
     pub neuronlake: Option<String>,
@@ -204,7 +204,7 @@ pub struct CompatibilityMetadata {
     pub min_version: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct TrainingStatus {
     #[serde(default)]
     pub state: Option<String>,
@@ -297,6 +297,88 @@ impl ExpertRegistry {
         self.experts_by_id
             .get(id)
             .and_then(|index| self.experts.get(*index))
+    }
+
+    pub(crate) fn from_runtime_parts(
+        lake_name: impl Into<String>,
+        server: RuntimeServerSettings,
+        experts: Vec<RegistryExpert>,
+    ) -> Result<Self, ValidationErrors> {
+        let lake_name = lake_name.into();
+        let mut errors = Vec::new();
+
+        require_non_empty(Some(&lake_name), "name", "lake name is required", &mut errors);
+        require_non_empty(
+            Some(&server.host),
+            "server.host",
+            "server host is required",
+            &mut errors,
+        );
+        require_non_empty(
+            Some(&server.model_name),
+            "server.model_name",
+            "server model_name is required",
+            &mut errors,
+        );
+
+        if experts.is_empty() {
+            errors.push(ValidationError::new(
+                "experts",
+                "at least one expert must be configured",
+            ));
+        }
+
+        let mut experts_by_id = HashMap::with_capacity(experts.len());
+        for (index, expert) in experts.iter().enumerate() {
+            let id_field = format!("experts[{index}].id");
+            let domain_field = format!("experts[{index}].domain");
+            let model_field = format!("experts[{index}].model");
+
+            if let Some(id) = require_non_empty(
+                Some(&expert.id),
+                &id_field,
+                "expert id is required",
+                &mut errors,
+            ) {
+                if experts_by_id.insert(id.to_string(), index).is_some() {
+                    errors.push(ValidationError::new(
+                        id_field,
+                        format!("duplicate expert id '{id}'"),
+                    ));
+                }
+            }
+
+            require_non_empty(
+                Some(&expert.domain),
+                &domain_field,
+                "expert domain is required",
+                &mut errors,
+            );
+            require_non_empty(
+                Some(&expert.model.original),
+                &model_field,
+                "expert model reference is required",
+                &mut errors,
+            );
+        }
+
+        if errors.is_empty() {
+            Ok(Self {
+                lake_name,
+                server,
+                experts,
+                experts_by_id,
+            })
+        } else {
+            Err(ValidationErrors::new(errors))
+        }
+    }
+
+    pub(crate) fn with_runtime_experts(
+        &self,
+        experts: Vec<RegistryExpert>,
+    ) -> Result<Self, ValidationErrors> {
+        Self::from_runtime_parts(self.lake_name.clone(), self.server.clone(), experts)
     }
 }
 

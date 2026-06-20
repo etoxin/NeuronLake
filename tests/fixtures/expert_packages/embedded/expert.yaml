@@ -1,0 +1,28 @@
+manifest_version: 1
+expert_id: sql-shared
+domain: SQL query design and optimization
+model:
+  embedded: artifacts/sql-shared.gguf
+routing_hints:
+  - sql
+  - postgres
+  - query planner
+examples:
+  - Explain why this PostgreSQL query is not using an index.
+version: 1.0.0
+sharing:
+  package: sql-shared
+  description: SQL-focused shared expert.
+  authors:
+    - Data Team
+  license: Apache-2.0
+  source: ./training/sql
+compatibility:
+  neuronlake: ">=0.1.0"
+  backend: llama.cpp
+  model_format: gguf
+  quantization: q4_k_m
+training_status:
+  state: trained
+  dataset: internal-sql-support
+  last_trained_at: "2026-06-01"
