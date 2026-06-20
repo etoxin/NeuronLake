@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::expert_router::{ExpertRouter, RouterError, RoutingMessage};
 use crate::lake_config::{ExpertRegistry, RuntimeServerSettings};
 use crate::local_backend::{
     BackendError, BackendMessage, BackendRequest, ExpertBackend, GenerationOptions,
@@ -199,6 +200,7 @@ pub struct OpenAiError {
 pub enum ChatServerError {
     InvalidModel { requested: String, expected: String },
     InvalidRequest(String),
+    Router(RouterError),
     Backend(BackendError),
     BindAddress(std::net::AddrParseError),
     Io(std::io::Error),
@@ -216,6 +218,7 @@ impl fmt::Display for ChatServerError {
                 "requested model '{requested}' does not match configured model '{expected}'"
             ),
             Self::InvalidRequest(message) => write!(f, "{message}"),
+            Self::Router(error) => write!(f, "{error}"),
             Self::Backend(error) => write!(f, "{error}"),
             Self::BindAddress(error) => write!(f, "invalid server bind address: {error}"),
             Self::Io(error) => write!(f, "server I/O error: {error}"),
@@ -229,6 +232,7 @@ impl std::error::Error for ChatServerError {
         match self {
             Self::BindAddress(error) => Some(error),
             Self::Io(error) | Self::Serve(error) => Some(error),
+            Self::Router(error) => Some(error),
             Self::Backend(error) => Some(error),
             Self::InvalidModel { .. } | Self::InvalidRequest(_) => None,
         }
@@ -238,6 +242,12 @@ impl std::error::Error for ChatServerError {
 impl From<BackendError> for ChatServerError {
     fn from(error: BackendError) -> Self {
         Self::Backend(error)
+    }
+}
+
+impl From<RouterError> for ChatServerError {
+    fn from(error: RouterError) -> Self {
+        Self::Router(error)
     }
 }
 
@@ -260,6 +270,13 @@ impl IntoResponse for ChatServerError {
                 None,
                 Some("invalid_request".to_string()),
                 message,
+            ),
+            Self::Router(error) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                None,
+                Some("router_error".to_string()),
+                error.to_string(),
             ),
             Self::Backend(error) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -326,6 +343,22 @@ pub fn router_with_backend(
     )
 }
 
+pub fn router_with_routed_backend(
+    registry: ExpertRegistry,
+    expert_router: ExpertRouter,
+    backend: Arc<dyn ExpertBackend>,
+) -> Router {
+    let settings = registry.server().clone();
+    router_with_generator(
+        settings,
+        Arc::new(RoutedBackendChatGenerator::new(
+            registry,
+            expert_router,
+            backend,
+        )),
+    )
+}
+
 pub async fn serve_from_registry(registry: &ExpertRegistry) -> Result<(), ChatServerError> {
     serve_settings(registry.server().clone()).await
 }
@@ -348,6 +381,38 @@ pub struct BackendChatGenerator {
     registry: Arc<ExpertRegistry>,
     selected_expert_id: String,
     backend: Arc<dyn ExpertBackend>,
+}
+
+pub struct RoutedBackendChatGenerator {
+    registry: Arc<ExpertRegistry>,
+    router: ExpertRouter,
+    backend: Arc<dyn ExpertBackend>,
+}
+
+impl RoutedBackendChatGenerator {
+    pub fn new(
+        registry: ExpertRegistry,
+        router: ExpertRouter,
+        backend: Arc<dyn ExpertBackend>,
+    ) -> Self {
+        Self {
+            registry: Arc::new(registry),
+            router,
+            backend,
+        }
+    }
+
+    fn selected_expert_id(&self, request: &ChatCompletionRequest) -> String {
+        let messages = request
+            .messages
+            .iter()
+            .map(|message| RoutingMessage {
+                role: message.role.clone(),
+                content: message.content_text().unwrap_or_default(),
+            })
+            .collect::<Vec<_>>();
+        self.router.route_messages(&messages, false).expert_id
+    }
 }
 
 impl BackendChatGenerator {
@@ -411,6 +476,28 @@ impl ChatGenerator for BackendChatGenerator {
             .into_iter()
             .map(|delta| delta.content)
             .collect())
+    }
+}
+
+impl ChatGenerator for RoutedBackendChatGenerator {
+    fn generate(&self, request: &ChatCompletionRequest) -> Result<GeneratedChat, ChatServerError> {
+        let selected_expert_id = self.selected_expert_id(request);
+        let adapter = BackendChatGenerator::new(
+            (*self.registry).clone(),
+            selected_expert_id,
+            self.backend.clone(),
+        );
+        adapter.generate(request)
+    }
+
+    fn stream(&self, request: &ChatCompletionRequest) -> Result<Vec<String>, ChatServerError> {
+        let selected_expert_id = self.selected_expert_id(request);
+        let adapter = BackendChatGenerator::new(
+            (*self.registry).clone(),
+            selected_expert_id,
+            self.backend.clone(),
+        );
+        adapter.stream(request)
     }
 }
 
@@ -911,6 +998,45 @@ mod tests {
         assert!(first < second);
         assert!(text.contains("data: [DONE]"));
         assert_eq!(backend.request_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn routed_backend_selects_expert_before_generation_without_debug_text() {
+        let registry = fixture_registry();
+        let expert_router = ExpertRouter::train(&registry).unwrap();
+        let backend = Arc::new(RecordingBackend::new(["unused"]));
+        let app = router_with_routed_backend(registry, expert_router, backend.clone());
+        let body = json!({
+            "model": "library-lake-v1",
+            "messages": [
+                {"role": "user", "content": "Fix a TanStack Router createFileRoute loader in routes/posts.$id.tsx"}
+            ]
+        })
+        .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/chat/completions")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(body)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        let content = value["choices"][0]["message"]["content"].as_str().unwrap();
+
+        assert_eq!(content, "backend response from tanstack-router");
+        assert!(!content.contains("selected expert"));
+        assert!(!content.contains("routing signal"));
+        assert!(!content.contains("confidence"));
+        assert!(!content.contains("score"));
+        assert_eq!(backend.last_request().expert_id, "tanstack-router");
     }
 
     #[test]
