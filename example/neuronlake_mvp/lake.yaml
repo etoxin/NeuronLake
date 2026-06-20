@@ -1,0 +1,74 @@
+name: neuronlake-mvp
+
+experts:
+  - id: qwen-coder
+    domain: Software engineering, Rust, TypeScript, JavaScript, debugging, build errors, and code review.
+    model: ./models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf
+    routing_hints:
+      - rust
+      - cargo
+      - compiler error
+      - typescript
+      - javascript
+      - react
+      - tanstack router
+      - code review
+      - test failure
+      - stack trace
+    examples:
+      - Fix this Rust borrow checker error and explain the smallest safe code change.
+      - Review a TanStack Router loader that is not receiving route params.
+      - Diagnose why this cargo test failure happens in a local crate.
+    version: "0.1.0"
+    sharing:
+      package: qwen-coder-mvp
+      description: Local coding expert used by the NeuronLake MVP example.
+      authors:
+        - NeuronLake
+      license: Apache-2.0
+      source: https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF
+    compatibility:
+      backend: llama.cpp
+      model_format: gguf
+      quantization: q4_k_m
+    training_status:
+      state: imported
+      dataset: Qwen2.5-Coder-0.5B-Instruct-GGUF
+
+  - id: qwen-general
+    domain: General assistant tasks, writing, planning, summaries, product reasoning, and everyday technical explanations.
+    model: ./models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+    routing_hints:
+      - summarize
+      - explain
+      - plan
+      - compare
+      - outline
+      - writing
+      - product
+      - meeting notes
+      - general question
+    examples:
+      - Summarize these meeting notes into decisions and follow-up actions.
+      - Explain the tradeoffs of a local-first MVP architecture.
+      - Draft a short product plan for a developer tool release.
+    version: "0.1.0"
+    sharing:
+      package: qwen-general-mvp
+      description: Local general assistant expert used by the NeuronLake MVP example.
+      authors:
+        - NeuronLake
+      license: Apache-2.0
+      source: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+    compatibility:
+      backend: llama.cpp
+      model_format: gguf
+      quantization: q4_k_m
+    training_status:
+      state: imported
+      dataset: Qwen2.5-0.5B-Instruct-GGUF
+
+server:
+  host: 127.0.0.1
+  port: 8080
+  model_name: neuronlake-mvp

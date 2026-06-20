@@ -1,0 +1,12 @@
+{
+  "model": "neuronlake-mvp",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Review this Rust function and explain why cargo test reports a borrow checker error around a mutable reference."
+    }
+  ],
+  "stream": false,
+  "temperature": 0.2,
+  "max_tokens": 160
+}

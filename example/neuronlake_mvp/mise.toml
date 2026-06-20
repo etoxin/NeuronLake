@@ -1,0 +1,55 @@
+[tools]
+rust = "latest"
+python = "3.12"
+uv = "latest"
+
+[env]
+HF_XET_HIGH_PERFORMANCE = "1"
+LAKE_CONFIG = "lake.yaml"
+LLAMA_CPP_BIN = "llama-cli"
+
+[tasks."download:models"]
+description = "Download the MVP GGUF experts from Hugging Face"
+run = """
+mkdir -p models
+uv run --no-project --with huggingface_hub hf download Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF qwen2.5-coder-0.5b-instruct-q4_k_m.gguf --local-dir models
+uv run --no-project --with huggingface_hub hf download Qwen/Qwen2.5-0.5B-Instruct-GGUF qwen2.5-0.5b-instruct-q4_k_m.gguf --local-dir models
+"""
+
+[tasks.doctor]
+description = "Check local prerequisites for the NeuronLake MVP example"
+run = """
+test -f models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf
+test -f models/qwen2.5-0.5b-instruct-q4_k_m.gguf
+command -v "${LLAMA_CPP_BIN}" >/dev/null 2>&1
+cargo check --manifest-path ../../Cargo.toml --example neuronlake_mvp --no-default-features
+"""
+
+[tasks.test]
+description = "Run the MVP readiness check"
+depends = ["doctor"]
+
+[tasks.serve]
+description = "Start the routed NeuronLake OpenAI-compatible MVP server"
+depends = ["download:models"]
+run = "cargo run --manifest-path ../../Cargo.toml --example neuronlake_mvp --no-default-features -- lake.yaml"
+
+[tasks.run]
+description = "Download models and start the MVP server"
+depends = ["serve"]
+
+[tasks."chat:code"]
+description = "Send a coding prompt through the local OpenAI-compatible endpoint"
+run = """
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d @request-code.json
+"""
+
+[tasks."chat:general"]
+description = "Send a general prompt through the local OpenAI-compatible endpoint"
+run = """
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d @request-general.json
+"""
