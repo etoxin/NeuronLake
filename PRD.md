@@ -1,96 +1,247 @@
-Here is a comprehensive, production-ready Product Requirement Document (PRD) for **NeuronLake**. It bridges the matrix-free, cache-aligned Rust architecture of NeuronGuard with standard local developer tools, creating a plug-and-play, stateless edge-computing runtime.
-
----
-
-# Product Requirement Document (PRD)
+# Product Requirement Document
 
 ## Project: NeuronLake
 
-**Author:** etoxin
-
-**Status:** Draft / Conceptual MVP
-
-**Target Architecture:** 16GB RAM Unified Memory Footprint (e.g., Apple Silicon M-Series, Consumer X86 Windows/Linux Edge Workstations)
-
----
-
-## 1. Executive Summary & Objective
-
-Modern terminal-first AI coding agents (such as OpenCode) are restricted by a harsh local hardware paradox: running massive frontier models locally consumes prohibitive VRAM/RAM resources and causes severe execution latency, while running small models ($0.5\text{B} - 1\text{B}$) results in severe structural hallucination, API syntax cross-contamination, and memory constraints.
-
-**NeuronLake** resolves this by introducing a matrix-free, local **Neuromorphic Routing Swarm**. By combining a lightning-fast, 64-byte cache-aligned Spiking Neural Network (SNN) engine (**NeuronGuard**) with a fluid reservoir of hyper-specialized, library-specific $0.5\text{B}$ GGUF models, NeuronLake enables consumer hardware to achieve domain-specific execution accuracy that rivals monolithic frontier models, operating entirely within a strict $2\text{ GB} - 3\text{ GB}$ memory footprint.
-
-The system exposes a standard local OpenAI-compatible endpoint, allowing external developer agents like **OpenCode** to tap into an extensive, multi-language coding ecosystem with zero modification to their source logic.
+**Author:** etoxin  
+**Status:** Draft / Conceptual MVP  
+**Primary Test Harness:** OpenCode via an OpenAI-compatible local endpoint  
+**Target Runtime:** Local developer workstations with consumer CPU/GPU hardware
 
 ---
 
-## 2. System Architecture & High-Level Topology
+## 1. Executive Summary
 
-NeuronLake completely removes the monolithic LLM from the active routing path. It splits memory into two clean, concurrent layers operating on a single consumer machine:
+NeuronLake is a local expert-model runtime for terminal-first coding agents.
 
+Instead of asking one large model to answer every coding request, NeuronLake lets a user build a local swarm of small, highly targeted coding experts. Each expert is a compact model, typically around 0.5B parameters, trained or distilled for a narrow domain such as JavaScript, TanStack Router, React, FastAPI, SQL, Tailwind, or a specific internal codebase.
+
+The user defines the available experts in a YAML configuration file. NeuronLake then uses a larger teacher model, initially Gemma 12B, to help distill targeted behavior into the small expert models. Once the user has added and trained the experts, NeuronGuard is trained as the fast routing layer that decides which expert should receive each incoming coding request.
+
+After setup, the user starts the NeuronLake server. NeuronLake exposes a local OpenAI-compatible endpoint that can be used by OpenCode without changes to OpenCode itself.
+
+The goal is a practical local coding runtime:
+
+- Small models for narrow, high-accuracy domains.
+- User-owned expert configuration and training.
+- Shareable expert models.
+- NeuronGuard-powered routing across the expert swarm.
+- OpenAI-compatible serving for existing developer agents.
+
+---
+
+## 2. Product Vision
+
+NeuronLake should make local coding agents more useful on ordinary hardware by replacing a single general-purpose local model with a routed set of small specialists.
+
+The intended user flow is:
+
+1. The user creates a `swarm.yaml` file that lists the small expert models they want to use.
+2. The user adds local or remote model references for each expert.
+3. The user optionally provides domain material, examples, docs, repositories, or prompts for each expert.
+4. NeuronLake uses a teacher model such as Gemma 12B to distill targeted training data or behavior into each small expert.
+5. The user trains or imports the small expert models.
+6. NeuronGuard is trained on the expert set so it can route incoming prompts to the best expert.
+7. The user starts the NeuronLake server.
+8. OpenCode connects to NeuronLake through a local OpenAI-compatible endpoint.
+
+NeuronLake is not intended to be a monolithic foundation model. It is a local routing and serving layer for user-composed expert models.
+
+---
+
+## 3. Goals
+
+### 3.1 MVP Goals
+
+- Support a user-editable `swarm.yaml` file for defining expert models.
+- Allow users to register small local models, initially targeting 0.5B-class GGUF models.
+- Support domain-specific expert definitions such as JavaScript, TanStack Router, React, FastAPI, SQL, Tailwind, and project-specific experts.
+- Provide a distillation workflow using a larger teacher model such as Gemma 12B.
+- Train NeuronGuard as the router over the configured expert set.
+- Expose an OpenAI-compatible `/v1/chat/completions` endpoint.
+- Support Server-Sent Events streaming for agent compatibility.
+- Validate integration using OpenCode as the primary test harness.
+- Allow users to import, export, and share expert model definitions and trained artifacts.
+
+### 3.2 Non-Goals For The First MVP
+
+- NeuronLake will not initially train foundation models from scratch.
+- NeuronLake will not initially guarantee all models are pinned in memory.
+- NeuronLake will not initially target a 1TB expert library.
+- NeuronLake will not initially require multi-turn memory or KV-cache persistence.
+- NeuronLake will not initially claim frontier-model parity without benchmark evidence.
+
+---
+
+## 4. Core Concepts
+
+### 4.1 Expert Model
+
+An expert model is a small model specialized for a narrow coding domain.
+
+Example experts:
+
+- `javascript-core`
+- `typescript-core`
+- `react`
+- `tanstack-router`
+- `tailwind`
+- `fastapi`
+- `sql`
+- `project-local`
+
+Each expert should include:
+
+- A stable expert ID.
+- A model path or remote source.
+- A target domain.
+- Optional training material.
+- Optional routing hints.
+- Optional metadata for sharing and reuse.
+
+### 4.2 Teacher Model
+
+The teacher model is a larger model used during setup and training, not necessarily during normal serving.
+
+The initial teacher target is Gemma 12B. Its job is to help generate, clean, or distill domain-specific examples that can improve the small experts.
+
+The teacher model may be used for:
+
+- Creating synthetic instruction examples.
+- Converting documentation into Q&A or coding tasks.
+- Producing high-quality target completions.
+- Evaluating whether an expert response matches the intended domain behavior.
+- Generating router training examples for NeuronGuard.
+
+### 4.3 NeuronGuard Router
+
+NeuronGuard is the fast routing layer.
+
+After the user's experts are added and trained, NeuronLake trains NeuronGuard to map incoming requests to expert IDs. The router should use features such as:
+
+- Library names.
+- Imports.
+- File extensions.
+- Framework-specific APIs.
+- Error messages.
+- Code block language tags.
+- Package names.
+- User-provided routing hints.
+- Examples generated during distillation.
+
+The router does not replace the expert models. It selects the best expert for a request.
+
+### 4.4 OpenAI-Compatible Server
+
+NeuronLake exposes a local HTTP API compatible with OpenAI-style clients.
+
+The MVP endpoint is:
+
+```text
+POST /v1/chat/completions
 ```
-                  ┌─────────────────────────────────────┐
-                  │       Client Request: OpenCode      │
-                  └──────────────────┬──────────────────┘
-                                     │ POST /v1/chat/completions
-                                     ▼
-                  ┌─────────────────────────────────────┐
-                  │       NeuronLake HTTP Server        │
-                  └──────────────────┬──────────────────┘
-                                     │
-                        [ Sub-Millisecond SNN Match ]
-                                     ▼
-                  ┌─────────────────────────────────────┐
-                  │      NeuronGuard SNN Router         │
-                  │  (Cache-Aligned, Matrix-Free Core)   │
-                  └──────────────────┬──────────────────┘
-                                     │
-           ┌───────────┬─────────────┼─────────────┬───────────┐
-           ▼           ▼             ▼             ▼           ▼
-       [Model 1]   [Model 2]     [Model 3]     [Model 4]   [Model 5] ... [Models 6 & 7]
-       Core HTML   Tailwind      Async JS      FastAPI     SQL/DB        (Docs & Memory)
-       (0.5B GGUF) (0.5B GGUF)   (0.5B GGUF)   (0.5B GGUF) (0.5B GGUF)    (0.5B GGUF)
-       └─────────────────────────────┬───────────────────────────────┘
-                                     │ Concurrent RAM Pinned Buffer (~1.75 GB)
-                                     ▼
-                        [ 120+ tokens/sec Streaming ]
-                                     │
-                                     ▼
-                  ┌─────────────────────────────────────┐
-                  │     Standard OpenAI SSE Output      │
-                  └─────────────────────────────────────┘
 
-```
+This allows OpenCode to use NeuronLake as if it were an OpenAI-compatible provider.
 
 ---
 
-## 3. Core Functional Requirements
+## 5. User Workflow
 
-### 3.1 Framework Architecture & Local Swarm Instantiation
+### 5.1 Configure Experts
 
-* **Requirement:** The platform must read a flat, user-editable deployment file (`swarm.yaml`) to construct the runtime topology.
-* **Specification:** On startup, the engine must parse the layout configuration, match the registered model references, allocate a fixed, unified memory pool, and verify that the target GGUF files are present in the local cache block.
+The user creates a `swarm.yaml` file in their workspace or NeuronLake config directory.
 
-### 3.2 GGUF Integration & Byte-Aligned Metadata Parsing
+Example:
 
-* **Requirement:** The system must natively ingest standard, unmodified community GGUF formats (e.g., `Q4_K_M` layouts).
-* **Specification:** The Rust engine must read the GGUF header file structural layout directly to extract the embedded `tokenizer.ggml.tokens` sheets.
-* **Neuromorphic Alignment:** The extracted tokens must be read directly to configure the SNN router’s **Field 0 (Lexical Focus)** topological grid arrays, establishing targeted synaptic path weights for language-specific tokens with zero local training required.
+```yaml
+name: frontend-swarm
+teacher:
+  id: gemma-12b
+  model: ./models/gemma-12b.gguf
 
-### 3.3 Sub-Millisecond Neuromorphic Stream Routing
+experts:
+  - id: javascript-core
+    domain: JavaScript language and runtime behavior
+    model: ./models/javascript-core-0.5b.gguf
+    train:
+      docs:
+        - ./training/javascript/
+      prompts:
+        - Explain JavaScript async behavior with small runnable examples.
+    routing_hints:
+      - javascript
+      - node
+      - async
+      - promise
 
-* **Requirement:** Stream routing must execute via NeuronGuard's matrix-free spatiotemporal ensemble system.
-* **Specification:**
-* **Field 0 (Lexical Focus):** Evaluates exact library keywords, macros, and namespaces.
-* **Field 1 (Structural Context):** Audits code geometry, syntax indentation profiles, and block scopes at line-rate.
-* **Winner-Take-All (WTA) Pool:** The moment an incoming token block crosses a specific accumulator threshold, the router must instantly pass execution handles to that specific expert. Total routing computation latency must remain under **1 millisecond**.
+  - id: tanstack-router
+    domain: TanStack Router application code
+    model: ./models/tanstack-router-0.5b.gguf
+    train:
+      docs:
+        - ./training/tanstack-router/
+      repos:
+        - ./examples/tanstack-router-app/
+    routing_hints:
+      - tanstack router
+      - createFileRoute
+      - routeTree
+      - loader
 
+server:
+  host: 127.0.0.1
+  port: 8080
+  model_name: library-lake-v1
+```
 
+### 5.2 Distill Experts
 
-### 3.4 OpenCode Target Integration via OpenAI Reverse Proxy
+The user runs a NeuronLake training or preparation command.
 
-* **Requirement:** Expose an OpenAI-compliant HTTP endpoint (`/v1/chat/completions`) supporting Server-Sent Events (SSE) streaming.
-* **Specification:** The backend must interface natively with any local config layout. A developer must be able to drops a standard `opencode.json` configuration block into a local workspace root, pointing OpenCode to NeuronLake seamlessly:
+The distillation workflow should:
+
+- Read `swarm.yaml`.
+- Validate that configured models and training sources exist.
+- Use the teacher model to generate or refine domain-specific training examples.
+- Save generated examples in a human-inspectable format.
+- Train or fine-tune the small expert models where supported.
+- Produce metadata that explains what each expert is intended to handle.
+
+### 5.3 Train NeuronGuard Routing
+
+After expert preparation, NeuronLake trains NeuronGuard to route requests across the configured expert set.
+
+The routing training set can come from:
+
+- User-provided examples.
+- Expert routing hints.
+- Documentation terms.
+- Package names and APIs.
+- Teacher-generated examples.
+- Evaluation prompts used during distillation.
+
+The output is a local router artifact tied to the current expert set.
+
+### 5.4 Start The Server
+
+The user starts NeuronLake:
+
+```bash
+neuronlake serve --config swarm.yaml
+```
+
+The server:
+
+- Loads `swarm.yaml`.
+- Loads the NeuronGuard router artifact.
+- Loads or prepares the configured expert models.
+- Starts the OpenAI-compatible HTTP server.
+- Streams responses back to the client.
+
+### 5.5 Test With OpenCode
+
+OpenCode is the first target integration and test harness.
+
+Example OpenCode config:
 
 ```json
 {
@@ -102,57 +253,268 @@ NeuronLake completely removes the monolithic LLM from the active routing path. I
         "apiKey": "neuronlake-handshake"
       },
       "models": {
-        "library-lake-v1": { "name": "NeuronLake Swarm" }
+        "library-lake-v1": {
+          "name": "NeuronLake Swarm"
+        }
       }
     }
   },
   "model": "neuronlake-swarm/library-lake-v1"
 }
-
-```
-
-### 3.5 Stateless Context Execution with Background Memory Offloading
-
-* **Requirement:** The first pass execution architecture will explicitly handle queries statelessly to eliminate runtime KV-cache syncing overhead.
-* **Specification:** Every chat payload is treated as a clean, self-contained prompt.
-* **The Background Memory Agent:** To preserve cross-session insights, the runtime must route transaction footprints asynchronously to a dedicated **0.5B Memory Expert**. This background specialist captures key configurations, language preferences, and API schemas, writing them straight to a local, human-readable markdown file, ensuring the active coding specialists remain unburdened by history.
-
----
-
-## 4. Hardware & Performance Targets
-
-Target metrics are mapped explicitly to a base **16GB MacBook Pro** running under a strict 7-model configuration pool:
-
-* **Active Memory Budget:** 7 models $\times$ $\sim 250\text{ MB}$ per INT4 model = **~1.75 GB total active footprint**. The runtime must pin this entire model block concurrently in RAM/VRAM to eliminate disk I/O thrashing.
-* **Switching Latency:** Moving execution pointers between hot resident models in the unified memory buffer must execute in **$\sim 0$ milliseconds**.
-* **Generation Throughput:** Token generation utilizing embedded `llama.cpp` bindings must match or exceed **120 tokens/second** on standard M-Series Apple Silicon graphics pipelines.
-
----
-
-## 5. Developer Lifecycle & Workflow
-
-The entire user interaction path is optimized for zero friction, stripping away complex deep learning toolchains:
-
-```
-[ Step 1: Clone Repository ]
-            │
-            ▼
-[ Step 2: Define Experts in swarm.yaml ]
-            │
-            ▼
-[ Step 3: Run 'python start_lake.py' ] ───> Downloads GGUF files & mounts SNN weights
-            │
-            ▼
-[ Step 4: Drop config into opencode.json ]
-            │
-            ▼
-[ Step 5: Execute 'opencode' in Terminal ] ───> Instant, stateless local execution loop
-
 ```
 
 ---
 
-## 6. Future Expansion Roadmap
+## 6. Functional Requirements
 
-* **Phase 2 (Dynamic Paging Scale):** Transition from a 7-model memory-pinned cache to a full **1-Terabyte NVMe library swarm** (4,000+ experts), utilizing NeuronGuard's Field 2 (Sequential Delta) array to run predictive, asynchronous background pre-fetching threads in under 20ms over PCIe Gen 4/5 data lines.
-* **Phase 3 (Flash State Resuming):** Implement flat, pointerless serialization structures to save and swap small internal KV-cache binary blocks directly, enabling ultra-fast multi-turn continuity for active experts without re-parsing text strings.
+### 6.1 YAML Configuration
+
+NeuronLake must read a user-editable YAML file that defines:
+
+- Swarm name.
+- Teacher model.
+- Expert models.
+- Expert domains.
+- Model paths or remote sources.
+- Optional training sources.
+- Optional routing hints.
+- Server configuration.
+
+The YAML file should remain simple enough for users to edit by hand.
+
+### 6.2 Expert Model Registry
+
+NeuronLake must maintain a registry of configured experts at runtime.
+
+The registry should support:
+
+- Local model paths.
+- Downloaded model cache paths.
+- Imported shared experts.
+- Expert metadata.
+- Version information.
+- Training status.
+
+### 6.3 Distillation Pipeline
+
+NeuronLake must support a workflow where a teacher model helps prepare small experts.
+
+The initial implementation may support one or more of:
+
+- Dataset generation.
+- Instruction-response generation.
+- Documentation summarization into examples.
+- Router example generation.
+- Expert evaluation prompts.
+
+The MVP can begin with generated datasets and routing examples before full fine-tuning automation is implemented.
+
+### 6.4 Expert Training Or Import
+
+NeuronLake must allow users to either:
+
+- Train a small expert locally.
+- Import an already trained expert.
+- Reference an existing local GGUF expert.
+- Use a shared expert artifact from another user.
+
+The system should not assume all users will train every expert themselves.
+
+### 6.5 NeuronGuard Router Training
+
+NeuronLake must train NeuronGuard against the configured expert list.
+
+The trained router should:
+
+- Predict the best expert for a request.
+- Return confidence or score information where practical.
+- Support debugging output explaining why an expert was selected.
+- Be rebuildable when `swarm.yaml` changes.
+
+### 6.6 OpenAI-Compatible Chat Endpoint
+
+NeuronLake must expose:
+
+```text
+POST /v1/chat/completions
+```
+
+The endpoint should accept standard chat messages and return OpenAI-compatible responses.
+
+The MVP must support:
+
+- `model`
+- `messages`
+- `stream`
+- Basic generation parameters where supported by the backend.
+
+### 6.7 SSE Streaming
+
+When `stream: true` is provided, NeuronLake must stream OpenAI-style Server-Sent Events.
+
+This is required for agent UX and OpenCode compatibility.
+
+### 6.8 Model Sharing
+
+NeuronLake should allow users to share expert models and metadata.
+
+A shareable expert package should include:
+
+- Expert ID.
+- Domain description.
+- Model artifact reference.
+- Routing hints.
+- Training metadata.
+- Compatibility information.
+
+The first version can use simple local folders or archives before any registry or marketplace exists.
+
+---
+
+## 7. Runtime Request Flow
+
+```text
+OpenCode
+  |
+  | POST /v1/chat/completions
+  v
+NeuronLake server
+  |
+  | extract prompt/code/context features
+  v
+NeuronGuard router
+  |
+  | select expert ID
+  v
+Expert model backend
+  |
+  | generate response
+  v
+OpenAI-compatible response / SSE stream
+```
+
+For the MVP, one expert should handle each request. Later versions may support multi-expert voting, fallback, or chained expert calls.
+
+---
+
+## 8. Architecture
+
+### 8.1 Components
+
+```text
+NeuronLake
+├── config
+│   └── swarm.yaml parser and validator
+├── registry
+│   └── expert model metadata and artifact tracking
+├── distillation
+│   └── teacher-model assisted dataset and routing example generation
+├── router
+│   └── NeuronGuard expert selection
+├── backend
+│   └── GGUF / llama.cpp-compatible model execution
+├── server
+│   └── OpenAI-compatible HTTP and SSE API
+└── sharing
+    └── import/export format for trained experts
+```
+
+### 8.2 Existing NeuronGuard Role
+
+The existing NeuronGuard codebase provides the starting point for:
+
+- Cache-aligned routing structures.
+- Fast token/feature classification.
+- Trainable associative routing.
+- Python and Rust integration patterns.
+
+NeuronLake should preserve NeuronGuard as the routing engine while adding the model-serving and expert-management layers around it.
+
+---
+
+## 9. MVP Implementation Phases
+
+### Phase 1: Configuration And Server Skeleton
+
+- Add `swarm.yaml` schema.
+- Parse and validate expert definitions.
+- Add OpenAI-compatible HTTP server.
+- Add basic `/v1/chat/completions` response shape.
+- Add OpenCode configuration example.
+
+### Phase 2: Local Expert Execution
+
+- Integrate a GGUF-compatible inference backend.
+- Load one configured expert.
+- Generate non-streaming responses.
+- Add streaming SSE support.
+
+### Phase 3: NeuronGuard Routing
+
+- Extract prompt features for routing.
+- Train NeuronGuard from routing hints and examples.
+- Select an expert per request.
+- Add route debugging output.
+
+### Phase 4: Distillation Workflow
+
+- Add Gemma 12B teacher configuration.
+- Generate expert-specific training examples.
+- Generate router training examples.
+- Store generated datasets for inspection.
+- Add hooks for fine-tuning or importing trained experts.
+
+### Phase 5: Expert Sharing
+
+- Define an expert package format.
+- Add import/export commands.
+- Track version and compatibility metadata.
+- Allow users to reuse community or team experts.
+
+---
+
+## 10. Performance Targets
+
+Initial performance targets should be measured, not assumed.
+
+MVP targets:
+
+- Router selection should be fast enough to be invisible compared with model generation.
+- Server overhead should be low enough for interactive coding use.
+- Streaming should begin as soon as the selected expert starts producing tokens.
+- The runtime should support at least one local 0.5B-class expert model.
+- The runtime should be designed to grow toward several resident experts as backend support allows.
+
+Future targets:
+
+- Multiple hot-loaded experts.
+- Sub-millisecond NeuronGuard routing on normal prompts.
+- Concurrent expert availability without disk thrashing.
+- Optional fallback to a larger local model when routing confidence is low.
+
+---
+
+## 11. Open Questions
+
+- Which GGUF inference backend should be used first: direct llama.cpp bindings, a Rust crate, or a subprocess wrapper?
+- What is the first supported format for training or fine-tuning 0.5B experts?
+- Should NeuronLake generate datasets only, or automate the full fine-tuning loop in the MVP?
+- How should shared expert packages reference model weights that may be too large for normal source control?
+- Should low-confidence routing fall back to the teacher model, a default expert, or an error response?
+- How much of the router explanation should be exposed to users during normal OpenCode sessions?
+
+---
+
+## 12. Success Criteria
+
+The MVP is successful when:
+
+- A user can define at least two small experts in `swarm.yaml`.
+- NeuronLake can validate the config and prepare the expert registry.
+- NeuronGuard can be trained to route between those experts.
+- NeuronLake can start a local OpenAI-compatible server.
+- OpenCode can send chat requests to NeuronLake.
+- NeuronLake can route a request to the selected expert.
+- NeuronLake can stream an OpenAI-compatible response back to OpenCode.
+- Expert configuration and trained artifacts can be exported or reused by another user.
+
