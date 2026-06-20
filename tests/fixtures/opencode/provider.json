@@ -1,0 +1,17 @@
+{
+  "provider": {
+    "neuronlake": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "apiKey": "neuronlake-handshake"
+      },
+      "models": {
+        "library-lake-v1": {
+          "name": "NeuronLake"
+        }
+      }
+    }
+  },
+  "model": "neuronlake/library-lake-v1"
+}

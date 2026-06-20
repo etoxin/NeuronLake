@@ -1,0 +1,57 @@
+[tools]
+rust = "latest"
+python = "3.12"
+uv = "latest"
+
+[env]
+HF_XET_HIGH_PERFORMANCE = "1"
+NEURONLAKE_MVP_DIR = "{{config_root}}"
+LAKE_CONFIG = "{{config_root}}/lake.yaml"
+LLAMA_CPP_BIN = "llama-completion"
+NEURONLAKE_DEFAULT_MAX_TOKENS = "192"
+
+[tasks."download:models"]
+description = "Download the MVP GGUF experts from Hugging Face"
+run = """
+mkdir -p "${NEURONLAKE_MVP_DIR}/models"
+uv run --no-project --with huggingface_hub hf download Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF qwen2.5-coder-0.5b-instruct-q4_k_m.gguf --local-dir "${NEURONLAKE_MVP_DIR}/models"
+uv run --no-project --with huggingface_hub hf download Qwen/Qwen2.5-0.5B-Instruct-GGUF qwen2.5-0.5b-instruct-q4_k_m.gguf --local-dir "${NEURONLAKE_MVP_DIR}/models"
+"""
+
+[tasks.doctor]
+description = "Check local prerequisites for the NeuronLake MVP example"
+run = """
+test -f "${NEURONLAKE_MVP_DIR}/models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf" || { echo "missing coder model; run: mise run download:models"; exit 1; }
+test -f "${NEURONLAKE_MVP_DIR}/models/qwen2.5-0.5b-instruct-q4_k_m.gguf" || { echo "missing general model; run: mise run download:models"; exit 1; }
+command -v "${LLAMA_CPP_BIN}" >/dev/null 2>&1 || { echo "missing ${LLAMA_CPP_BIN}; install llama.cpp or set LLAMA_CPP_BIN"; exit 1; }
+cargo check --manifest-path "{{config_root}}/../../Cargo.toml" --example neuronlake_mvp --no-default-features
+"""
+
+[tasks.test]
+description = "Run the MVP readiness check"
+depends = ["doctor"]
+
+[tasks.serve]
+description = "Start the routed NeuronLake OpenAI-compatible MVP server"
+depends = ["download:models"]
+run = "cargo run --manifest-path \"{{config_root}}/../../Cargo.toml\" --example neuronlake_mvp --no-default-features -- \"${LAKE_CONFIG}\""
+
+[tasks.run]
+description = "Download models and start the MVP server"
+depends = ["serve"]
+
+[tasks."chat:code"]
+description = "Send a coding prompt through the local OpenAI-compatible endpoint"
+run = """
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d @"${NEURONLAKE_MVP_DIR}/request-code.json"
+"""
+
+[tasks."chat:general"]
+description = "Send a general prompt through the local OpenAI-compatible endpoint"
+run = """
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d @"${NEURONLAKE_MVP_DIR}/request-general.json"
+"""

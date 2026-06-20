@@ -1,0 +1,46 @@
+name: frontend-lake
+
+experts:
+  - id: javascript-core
+    domain: JavaScript language and runtime behavior
+    model: ./models/javascript-core-0.5b.gguf
+    routing_hints:
+      - javascript
+      - node
+      - promise
+    examples:
+      - Explain JavaScript async behavior with small runnable examples.
+    version: "0.1.0"
+    compatibility:
+      neuronlake: ">=0.1.0"
+      backend: llama.cpp
+      model_format: gguf
+      quantization: q4_k_m
+    training_status:
+      state: imported
+      dataset: external
+
+  - id: tanstack-router
+    domain: TanStack Router application code
+    model:
+      remote: hf://example/tanstack-router-0.5b
+      cache_path: ./cache/tanstack-router-0.5b.gguf
+    routing_hints:
+      - tanstack router
+      - createFileRoute
+      - routeTree
+      - loader
+    examples:
+      - Fix a TanStack Router loader that is not receiving route params.
+    sharing:
+      package: tanstack-router-expert
+      description: Router-focused frontend expert.
+      authors:
+        - NeuronLake
+      license: Apache-2.0
+      source: ./experts/tanstack-router
+
+server:
+  host: 127.0.0.1
+  port: 8080
+  model_name: library-lake-v1

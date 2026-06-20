@@ -1,0 +1,28 @@
+[package]
+name = "neuronguard"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.7"
+crossbeam-channel = "0.5.12"
+futures-util = "0.3"
+rayon = "1.8"
+memmap2 = "0.9"
+rand = "0.8"
+csv = "1.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.0", features = ["macros", "net", "rt-multi-thread"] }
+tower = { version = "0.5", features = ["util"] }
+pyo3 = { version = "0.21", features = ["experimental-declarative-modules"] }
+
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
+
+[lib]
+name = "neuronguard"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
