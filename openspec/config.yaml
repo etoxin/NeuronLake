@@ -1,20 +1,86 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Project: NeuronLake
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  NeuronLake is a local expert-model runtime for terminal-first coding agents.
+  It replaces a single general-purpose local model with a routed lake of small,
+  domain-specific coding experts. The first target integration and test harness
+  is OpenCode through a local OpenAI-compatible API.
+
+  Product milestones:
+  1. The Lake
+     - User configures experts in lake.yaml.
+     - Experts are small, targeted local models, initially 0.5B-class GGUF
+       models where practical.
+     - NeuronGuard is trained as the fast router over the configured expert set.
+     - NeuronLake exposes POST /v1/chat/completions with OpenAI-compatible
+       request/response shapes and SSE streaming.
+     - The Lake must work with imported or manually trained experts before any
+       teacher-student workflow exists.
+     - Expert definitions and artifacts should be importable, exportable, and
+       shareable.
+
+  2. Teacher-Student Model
+     - Adds an optional larger teacher model, initially Gemma 12B.
+     - The teacher is used during preparation and training, not required during
+       normal serving.
+     - The teacher can generate domain-specific datasets, produce router
+       examples, evaluate student expert outputs, and support fine-tuning hooks.
+     - Generated datasets must be saved in a human-inspectable format.
+     - The Lake server must remain usable without loading the teacher model.
+
+  Current codebase:
+  - This repository currently derives from NeuronGuard.
+  - Existing Rust code provides cache-aligned neuron fields, fast trainable
+    classification, and Python bindings through pyo3.
+  - NeuronGuard should remain the routing engine.
+  - NeuronLake will add config, expert registry, model backend, server,
+    OpenAI-compatible API, SSE streaming, sharing, and later teacher-student
+    workflows.
+
+  Core terms:
+  - lake.yaml: user-owned source of truth for the local expert lake.
+  - Expert model: a small model specialized for a narrow coding domain such as
+    JavaScript, TypeScript, React, TanStack Router, Tailwind, FastAPI, SQL, or a
+    project-local codebase.
+  - NeuronGuard router: fast classifier that maps incoming requests to expert
+    IDs using routing hints, examples, imports, file extensions, framework APIs,
+    package names, code block tags, and error messages.
+  - Teacher model: optional larger model used to generate and evaluate training
+    material for student experts.
+
+  Architectural preference:
+  - Keep Milestone 1 independent from Milestone 2.
+  - Prefer a working routed inference server before automating fine-tuning.
+  - Treat performance claims as targets that require measurement.
+  - Keep user-facing configuration explicit, local-first, and editable by hand.
+  - Avoid requiring a large teacher model to answer normal OpenCode requests.
+  - Use OpenAI-compatible interfaces so existing agents do not need custom
+    integration logic.
+
+rules:
+  proposal:
+    - State whether the change belongs to Milestone 1, Milestone 2, or both.
+    - Keep The Lake runtime independent from teacher-student training unless the change explicitly targets Milestone 2.
+    - Include clear non-goals for model training, memory pinning, and benchmark claims when relevant.
+    - Mention OpenCode compatibility when the change affects serving, streaming, model naming, or request handling.
+    - Prefer practical MVP scope over speculative future architecture.
+  design:
+    - Separate config, registry, router, backend, server, sharing, and teacher-student concerns.
+    - Use lake.yaml as the configuration file name in examples and design text.
+    - Treat NeuronGuard as the routing engine, not the text generation engine.
+    - Make teacher model loading optional and outside the normal serving path.
+    - Call out measurable performance assumptions instead of presenting them as guaranteed.
+    - Identify the chosen GGUF or inference backend boundary explicitly when relevant.
+  specs:
+    - Write requirements with observable SHALL behavior.
+    - Include acceptance scenarios for OpenAI-compatible requests and SSE streaming when the capability touches the API.
+    - Include routing confidence or debugging behavior when the capability touches NeuronGuard routing.
+    - Include config validation behavior for any lake.yaml schema changes.
+    - Keep Milestone 1 requirements runnable without Gemma 12B or any teacher model.
+  tasks:
+    - Order tasks so config validation and testable server behavior come before advanced optimization.
+    - Include focused verification tasks for OpenCode-compatible request handling when relevant.
+    - Include tests for lake.yaml parsing and invalid configuration cases when config changes.
+    - Do not make automated fine-tuning a prerequisite for Milestone 1 tasks.
